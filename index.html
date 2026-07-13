@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>SENTCOR — Игровой мессенджер</title>
+  <meta name="description" content="SENTCOR — игровой мессенджер с голосовыми чатами, серверами и друзьями." />
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🎮</text></svg>" />
+  <link rel="stylesheet" href="css/style.css" />
+  <!-- Supabase JS SDK -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <!-- LiveKit Client SDK -->
+  <script src="https://cdn.jsdelivr.net/npm/livekit-client@2/dist/livekit-client.umd.min.js"></script>
+</head>
+<body>
+  <div id="app">
+    <!-- Auth screen by default, rendered by js/ui.js -->
+  </div>
+
+  <div class="toast-container" id="toast-container"></div>
+
+  <!-- Load scripts in order -->
+  <script src="js/config.js"></script>
+  <script src="js/supabase.js"></script>
+  <script src="js/auth.js"></script>
+  <script src="js/ui.js"></script>
+  <script src="js/servers.js"></script>
+  <script src="js/chat.js"></script>
+  <script src="js/friends.js"></script>
+  <script src="js/profile.js"></script>
+  <script src="js/voice.js"></script>
+
+  <!-- App Initialization -->
+  <script>
+    (async function () {
+      "use strict";
+
+      const S = window.SENTCOR;
+
+      // Show auth screen first
+      S.ui.showAuth();
+
+      // Wait for Supabase to be ready and check session
+      const hasSession = await S.auth.initSession();
+
+      if (hasSession) {
+        // Already logged in — show app
+        await S.auth.setOnlineStatus("online");
+        await S.auth.recordLogin();
+        S.ui.showApp();
+
+        // Setup status click on footer avatar
+        setTimeout(() => S.profile.setupStatusClick(), 100);
+      }
+      // if no session, auth screen stays (onAuthStateChange will handle sign-in)
+
+      // Setup visibility change for online/offline
+      document.addEventListener("visibilitychange", async () => {
+        if (!S.user) return;
+        if (document.hidden) {
+          await S.auth.setOnlineStatus("idle");
+        } else {
+          await S.auth.setOnlineStatus("online");
+        }
+      });
+
+      // Before unload — set offline
+      window.addEventListener("beforeunload", async () => {
+        if (S.user) {
+          // Use sendBeacon for reliable offline status
+          const url = `${S.SENTCOR_CONFIG.SUPABASE_URL}/rest/v1/profiles?id=eq.${S.user.id}`;
+          const body = JSON.stringify({ status: "offline", last_login: new Date().toISOString() });
+          navigator.sendBeacon(url, new Blob([body], { type: "application/json" }));
+        }
+      });
+    })();
+  </script>
+</body>
+</html>
