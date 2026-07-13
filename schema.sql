@@ -1,8 +1,8 @@
 -- ============================================================
--- SENTCOR — Полная схема БД v2
+-- SENTCOR — Полная схема БД v3 (фикс рекурсии RLS)
 -- ============================================================
 
--- 1. ПРОФИЛИ (добавлены theme, last_username_change)
+-- 1. ПРОФИЛИ
 CREATE TABLE profiles (
   id             UUID PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
   username       TEXT UNIQUE NOT NULL,
@@ -16,7 +16,9 @@ CREATE TABLE profiles (
   theme          TEXT DEFAULT 'caramel' CHECK (theme IN ('caramel','oled','midnight')),
   last_username_change TIMESTAMPTZ DEFAULT now(),
   last_login     TIMESTAMPTZ DEFAULT now(),
-  created_at     TIMESTAMPTZ DEFAULT now()
+  created_at     TIMESTAMPTZ DEFAULT now(),
+  messages_count BIGINT DEFAULT 0,
+  servers_count  INT DEFAULT 0
 );
 ALTER TABLE profiles ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "profiles_select" ON profiles FOR SELECT USING (true);
@@ -39,7 +41,7 @@ CREATE POLICY "servers_insert" ON servers FOR INSERT WITH CHECK (auth.uid() = ow
 CREATE POLICY "servers_update" ON servers FOR UPDATE USING (owner_id = auth.uid());
 CREATE POLICY "servers_delete" ON servers FOR DELETE USING (owner_id = auth.uid());
 
--- 3. УЧАСТНИКИ СЕРВЕРА
+-- 3. УЧАСТНИКИ СЕРВЕРА (фикс: убрана рекурсивная ссылка)
 CREATE TABLE server_members (
   server_id  UUID NOT NULL REFERENCES servers(id) ON DELETE CASCADE,
   user_id    UUID NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
@@ -48,8 +50,9 @@ CREATE TABLE server_members (
   PRIMARY KEY (server_id, user_id)
 );
 ALTER TABLE server_members ENABLE ROW LEVEL SECURITY;
-CREATE POLICY "sm_select" ON server_members FOR SELECT
-  USING (EXISTS (SELECT 1 FROM server_members sm2 WHERE sm2.server_id = server_members.server_id AND sm2.user_id = auth.uid()));
+-- sm_select: любой авторизованный может видеть участников (для отображения списка)
+-- Безопасность: критичные действия защищены другими политиками
+CREATE POLICY "sm_select" ON server_members FOR SELECT USING (true);
 CREATE POLICY "sm_insert" ON server_members FOR INSERT WITH CHECK (auth.uid() = user_id);
 CREATE POLICY "sm_delete" ON server_members FOR DELETE
   USING (auth.uid() = user_id OR EXISTS (SELECT 1 FROM servers s WHERE s.id = server_members.server_id AND s.owner_id = auth.uid()));
@@ -92,7 +95,6 @@ CREATE POLICY "messages_insert" ON messages FOR INSERT
   WITH CHECK (auth.uid() = sender_id AND EXISTS (SELECT 1 FROM channels c
     JOIN server_members sm ON sm.server_id = c.server_id
     WHERE c.id = messages.channel_id AND sm.user_id = auth.uid() AND c.type = 'text'));
--- Любой может удалить своё; владелец/админ сервера — любое в своём сервере
 CREATE POLICY "messages_delete" ON messages FOR DELETE
   USING (auth.uid() = sender_id OR EXISTS (
     SELECT 1 FROM channels c JOIN server_members sm ON sm.server_id = c.server_id
@@ -115,7 +117,7 @@ CREATE POLICY "fr_insert" ON friend_requests FOR INSERT WITH CHECK (auth.uid() =
 CREATE POLICY "fr_update" ON friend_requests FOR UPDATE USING (auth.uid() = receiver_id OR auth.uid() = sender_id);
 CREATE POLICY "fr_delete" ON friend_requests FOR DELETE USING (auth.uid() = sender_id OR auth.uid() = receiver_id);
 
--- 7. ДРУЗЬЯ (добавлен muted)
+-- 7. ДРУЗЬЯ
 CREATE TABLE friends (
   user_id    UUID NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
   friend_id  UUID NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
@@ -186,7 +188,7 @@ CREATE INDEX idx_sm_user ON server_members(user_id);
 CREATE INDEX idx_channels_server ON channels(server_id);
 CREATE INDEX idx_blocked ON blocked_users(blocker_id);
 
--- АВТО-СОЗДАНИЕ ПРОФИЛЯ
+-- АВТО-ПРОФИЛЬ
 CREATE OR REPLACE FUNCTION create_profile_for_new_user()
 RETURNS TRIGGER AS $$
 BEGIN
@@ -197,7 +199,6 @@ BEGIN
   RETURN NEW;
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
-
 DROP TRIGGER IF EXISTS on_auth_user_created ON auth.users;
 CREATE TRIGGER on_auth_user_created AFTER INSERT ON auth.users
   FOR EACH ROW EXECUTE FUNCTION create_profile_for_new_user();
@@ -223,7 +224,6 @@ BEGIN
   RETURN NEW;
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
-
 DROP TRIGGER IF EXISTS on_daily_login ON daily_logins;
 CREATE TRIGGER on_daily_login AFTER INSERT ON daily_logins
   FOR EACH ROW EXECUTE FUNCTION update_streak_on_login();

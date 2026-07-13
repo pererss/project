@@ -7,19 +7,16 @@
   <meta name="description" content="SENTCOR — игровой мессенджер с голосовыми чатами, серверами и друзьями." />
   <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🎮</text></svg>" />
   <link rel="stylesheet" href="css/style.css" />
+  <!-- Font Awesome 6 -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" />
   <!-- Supabase JS SDK -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <!-- LiveKit Client SDK -->
   <script src="https://cdn.jsdelivr.net/npm/livekit-client@2/dist/livekit-client.umd.min.js"></script>
-  <!-- Twemoji for emoji rendering -->
-  <script src="https://cdn.jsdelivr.net/npm/twemoji@14/dist/twemoji.min.js"></script>
 </head>
 <body>
-  <div id="app">
-    <!-- Auth screen by default, rendered by js/ui.js -->
-  </div>
+  <div id="app"></div>
 
-  <!-- Load scripts in order -->
   <script src="js/config.js"></script>
   <script src="js/supabase.js"></script>
   <script src="js/auth.js"></script>
@@ -30,37 +27,13 @@
   <script src="js/profile.js"></script>
   <script src="js/voice.js"></script>
 
-  <!-- App Initialization -->
   <script>
-    (async function () {
-      "use strict";
-      const S = window.SENTCOR;
-
-      // Show auth screen first
+    (async function(){
+      const S=window.SENTCOR;
       S.ui.showAuth();
-
-      // Check existing session
-      const hasSession = await S.auth.initSession();
-      if (hasSession) {
-        await S.auth.setOnlineStatus("online");
-        await S.auth.recordLogin();
-        S.ui.showApp();
-      }
-
-      // Visibility => idle/online
-      document.addEventListener("visibilitychange", async () => {
-        if (!S.user) return;
-        await S.auth.setOnlineStatus(document.hidden ? "idle" : "online");
-      });
-
-      // Unload => offline via sendBeacon
-      window.addEventListener("beforeunload", () => {
-        if (S.user) {
-          const url = `${S.SENTCOR_CONFIG.SUPABASE_URL}/rest/v1/profiles?id=eq.${S.user.id}`;
-          const body = JSON.stringify({ status: "offline", last_login: new Date().toISOString() });
-          navigator.sendBeacon(url, new Blob([body], { type: "application/json" }));
-        }
-      });
+      const ok=await S.auth.initSession();
+      if(ok){await S.auth.setOnlineStatus("online");S.ui.showApp()}
+      window.addEventListener("beforeunload",()=>{if(S.user){const u=S.SENTCOR_CONFIG.SUPABASE_URL+"/rest/v1/profiles?id=eq."+S.user.id;navigator.sendBeacon(u,new Blob([JSON.stringify({status:"offline",last_login:new Date().toISOString()})],{type:"application/json"}))}})
     })();
   </script>
 </body>

@@ -1,125 +1,90 @@
-// ============================================================
-// SENTCOR — Servers Module v2
-// ============================================================
-(function () {
-  "use strict";
-  const S = window.SENTCOR;
-  const sb = S.sb;
-  S.serversList = []; S.channelsList = []; S.activeServer = null; S.activeChannel = null;
+// SENTCOR v3 — Servers
+(function(){
+  const S=window.SENTCOR,sb=S.sb;
+  S.serversList=[];S.channelsList=[];S.activeServer=null;S.activeChannel=null;
 
-  async function loadServersSidebar() {
-    if (!S.user) return;
-    const { data: memberships } = await sb.from("server_members").select("server_id").eq("user_id", S.user.id);
-    if (!memberships || !memberships.length) { renderSidebarServers([]); return; }
-    const ids = memberships.map(m => m.server_id);
-    const { data: servers } = await sb.from("servers").select("*").in("id", ids).order("created_at");
-    S.serversList = servers || [];
-    renderSidebarServers(S.serversList);
+  async function loadSidebarServers(){
+    if(!S.user)return;
+    const{data:m}=await sb.from("server_members").select("server_id").eq("user_id",S.user.id);
+    if(!m||!m.length){renderSidebar([]);return}
+    const ids=m.map(x=>x.server_id);
+    const{data:srv}=await sb.from("servers").select("*").in("id",ids).order("created_at");
+    S.serversList=srv||[];renderSidebar(S.serversList)
+  }
+  function renderSidebar(srvs){
+    const ct=document.getElementById("sidebar-servers");if(!ct)return;
+    let h="";srvs.forEach(s=>{const ini=s.name.charAt(0).toUpperCase();h+=`<div class="server-icon-nav" data-sid="${s.id}" title="${S.escapeHtml(s.name)}"><span>${ini}</span></div>`});
+    ct.innerHTML=h;
+    ct.querySelectorAll(".server-icon-nav").forEach(el=>el.addEventListener("click",()=>selectServer(el.dataset.sid)))
   }
 
-  function renderSidebarServers(servers) {
-    const container = document.getElementById("sidebar-servers"); if (!container) return;
-    let html = "";
-    servers.forEach(s => {
-      const initial = s.name.charAt(0).toUpperCase();
-      html += `<div class="server-icon-nav tooltip" data-tooltip="${S.escapeHtml(s.name)}" data-server-id="${s.id}"><span>${initial}</span></div>`;
-    });
-    container.innerHTML = html;
-    container.querySelectorAll(".server-icon-nav").forEach(el => {
-      el.addEventListener("click", () => { selectServer(el.dataset.serverId); });
-    });
+  async function selectServer(sid){
+    S.activeServer=sid;S.ui.activateNav("");// deactivate all nav
+    // highlight server icon
+    document.querySelectorAll("#sidebar .sidebar-nav").forEach(e=>e.classList.remove("active"));
+    document.querySelectorAll("#sidebar .server-icon-nav").forEach(e=>e.classList.remove("active"));
+    const icon=document.querySelector(`.server-icon-nav[data-sid="${sid}"]`);if(icon)icon.classList.add("active");
+    const srv=S.serversList.find(s=>s.id===sid);if(!srv)return;
+    $("#sub-panel").classList.remove("collapsed");
+    S.ui.setSubPanelHeader(srv.name);
+    renderChannels(sid)
   }
-
-  async function selectServer(serverId) {
-    S.activeServer = serverId;
-    S.ui.activateNav("servers");
-    const sp = document.getElementById("sub-panel"); if (sp) sp.classList.remove("collapsed");
-    const server = S.serversList.find(s => s.id === serverId);
-    if (!server) return;
-    // Highlight in sidebar
-    document.querySelectorAll("#sidebar .server-icon-nav").forEach(el => el.classList.remove("active"));
-    document.querySelectorAll("#sidebar .sidebar-nav").forEach(el => el.classList.remove("active"));
-    const icon = document.querySelector(`.server-icon-nav[data-server-id="${serverId}"]`); if (icon) icon.classList.add("active");
-    S.ui.setSubPanelHeader(server.name);
-    renderServerChannels(serverId);
+  async function renderChannels(sid){
+    const{data:ch}=await sb.from("channels").select("*").eq("server_id",sid).order("position");
+    S.channelsList=ch||[];
+    const srv=S.serversList.find(s=>s.id===sid);
+    const isOwner=srv&&srv.owner_id===S.user.id;
+    const txt=S.channelsList.filter(c=>c.type==="text"),vc=S.channelsList.filter(c=>c.type==="voice");
+    let h="";
+    if(txt.length){h+='<div class="sp-section-title">Текстовые каналы</div>';txt.forEach(c=>h+=`<div class="sp-item" data-chid="${c.id}"><i class="fa-solid fa-hashtag" style="width:18px;text-align:center;"></i> <span>${S.escapeHtml(c.name)}</span></div>`)}
+    if(vc.length){h+='<div class="sp-section-title">Голосовые каналы</div>';vc.forEach(c=>h+=`<div class="sp-item" data-chid="${c.id}"><i class="fa-solid fa-volume-high" style="width:18px;text-align:center;"></i> <span>${S.escapeHtml(c.name)}</span></div>`)}
+    if(!S.channelsList.length)h='<div style="padding:16px;text-align:center;color:var(--text-muted);font-size:12px;">Нет каналов</div>';
+    if(isOwner)h+='<div class="sp-item" id="add-ch-btn" style="color:var(--green);font-weight:600;"><i class="fa-solid fa-plus" style="width:18px;text-align:center;"></i> <span>Добавить канал</span></div>';
+    S.ui.setSubPanelContent(h);
+    document.querySelectorAll("#sp-content .sp-item[data-chid]").forEach(el=>el.addEventListener("click",()=>{
+      const ch=S.channelsList.find(c=>c.id===el.dataset.chid);if(!ch)return;
+      S.activeChannel=ch;S.ui.renderChatView(ch);S.chat.loadMessages(ch.id);loadMembers(sid)
+    }));
+    document.getElementById("add-ch-btn")?.addEventListener("click",()=>showCreateChannelModal(sid));
+    loadMembers(sid)
   }
-
-  async function renderServerChannels(serverId) {
-    const { data: channels } = await sb.from("channels").select("*").eq("server_id", serverId).order("position");
-    S.channelsList = channels || [];
-    const server = S.serversList.find(s => s.id === serverId);
-    const isOwner = server && server.owner_id === S.user.id;
-    const textCh = S.channelsList.filter(c => c.type === "text");
-    const voiceCh = S.channelsList.filter(c => c.type === "voice");
-    let html = "";
-    if (textCh.length) { html += `<div class="sp-section-title">Текстовые каналы</div>`; textCh.forEach(ch => { html += `<div class="sp-item" data-channel-id="${ch.id}" data-type="text"><span class="sp-icon">#</span><span class="sp-name">${S.escapeHtml(ch.name)}</span></div>`; }); }
-    if (voiceCh.length) { html += `<div class="sp-section-title">Голосовые каналы</div>`; voiceCh.forEach(ch => { html += `<div class="sp-item" data-channel-id="${ch.id}" data-type="voice"><span class="sp-icon">🔊</span><span class="sp-name">${S.escapeHtml(ch.name)}</span></div>`; }); }
-    if (!S.channelsList.length) html = '<div style="padding:16px;text-align:center;color:var(--text-muted);font-size:12px;">Нет каналов</div>';
-    if (isOwner) html += `<div class="sp-item" id="add-channel-btn" style="color:var(--green);font-weight:600;"><span class="sp-icon">+</span><span class="sp-name">Добавить канал</span></div>`;
-    S.ui.setSubPanelContent(html);
-    // Bind channel clicks
-    document.querySelectorAll("#sp-content .sp-item[data-channel-id]").forEach(el => {
-      el.addEventListener("click", () => {
-        const chId = el.dataset.channelId; const channel = S.channelsList.find(c => c.id === chId);
-        if (channel) { S.activeChannel = channel; S.ui.renderChatView(channel); S.chat.loadMessages(chId); loadMembers(serverId); }
-      });
-    });
-    const addBtn = document.getElementById("add-channel-btn"); if (addBtn) addBtn.addEventListener("click", () => showCreateChannelModal(serverId));
-    // Load members
-    loadMembers(serverId);
+  async function loadMembers(sid){
+    const{data:mm}=await sb.from("server_members").select("user_id,role").eq("server_id",sid);
+    if(!mm)return;
+    const me=mm.find(m=>m.user_id===S.user.id);S.ui.isAdmin=me&&(me.role==="owner"||me.role==="admin");
+    const ids=mm.map(m=>m.user_id);
+    const{data:pr}=await sb.from("profiles").select("*").in("id",ids);
+    if(pr)S.ui.renderMembers(pr)
   }
-
-  async function loadMembers(serverId) {
-    const { data: memberships } = await sb.from("server_members").select("user_id, role").eq("server_id", serverId);
-    if (!memberships) return;
-    // Check if current user is admin
-    const myRole = memberships.find(m => m.user_id === S.user.id);
-    S.ui.isAdmin = myRole && (myRole.role === "owner" || myRole.role === "admin");
-    const userIds = memberships.map(m => m.user_id);
-    const { data: profiles } = await sb.from("profiles").select("*").in("id", userIds);
-    if (profiles) S.ui.renderMembers(profiles);
-  }
-
-  function showServersPage() {
-    S.ui.activateNav("servers");
-    const sp = document.getElementById("sub-panel"); if (sp) sp.classList.remove("collapsed");
+  function showPage(){
+    S.ui.activateNav("servers");$("#sub-panel").classList.remove("collapsed");
     S.ui.setSubPanelHeader("Серверы");
-    let html = `<div style="padding:16px;"><button class="btn btn-accent-outline" id="sp-create-server-btn" style="width:100%;justify-content:center;">+ Создать сервер</button></div>`;
-    if (S.serversList.length) {
-      html += `<div class="sp-section-title">Мои серверы</div>`;
-      S.serversList.forEach(s => { html += `<div class="sp-item server-list-item" data-server-id="${s.id}"><span class="sp-icon">S</span><span class="sp-name">${S.escapeHtml(s.name)}</span></div>`; });
-    } else { html += '<div style="padding:16px;text-align:center;color:var(--text-muted);font-size:12px;">Вы не состоите ни в одном сервере</div>'; }
-    S.ui.setSubPanelContent(html);
-    document.getElementById("sp-create-server-btn").addEventListener("click", () => showCreateServerModal());
-    document.querySelectorAll(".server-list-item").forEach(el => { el.addEventListener("click", () => selectServer(el.dataset.serverId)); });
-    S.ui.showHomePage();
+    let h=`<div style="padding:12px;"><button class="btn btn-accent-outline" id="sp-create-server" style="width:100%;"><i class="fa-solid fa-plus"></i> Создать сервер</button></div>`;
+    if(S.serversList.length){h+='<div class="sp-section-title">Мои серверы</div>';S.serversList.forEach(s=>h+=`<div class="sp-item srv-item" data-sid="${s.id}"><i class="fa-solid fa-server" style="width:18px;text-align:center;"></i> <span>${S.escapeHtml(s.name)}</span></div>`)}
+    else h+='<div style="padding:16px;text-align:center;color:var(--text-muted);font-size:12px;">Вы не состоите ни в одном сервере</div>';
+    S.ui.setSubPanelContent(h);
+    document.getElementById("sp-create-server")?.addEventListener("click",showCreateModal);
+    document.querySelectorAll(".srv-item").forEach(el=>el.addEventListener("click",()=>selectServer(el.dataset.sid)));
+    S.ui.showHomePage()
   }
-
-  function showCreateServerModal() {
-    const body = `<div class="input-group"><label class="input-label">Название</label><input class="input" id="ns-name" placeholder="Мой сервер" maxlength="100" /><div class="input-error" id="ns-error"></div></div>`;
-    S.ui.showModal("Создать сервер", body, [
-      { text: "Отмена", cls: "btn-secondary" },
-      { text: "Создать", cls: "btn-primary", onClick: async () => { const n = document.getElementById("ns-name").value.trim(); if (!n) { document.getElementById("ns-error").textContent = "Введите название"; return; } await createServer(n); document.querySelector(".modal-overlay").remove(); } }
-    ]);
+  function showCreateModal(){
+    const b='<div class="input-group"><label class="input-label">Название</label><input class="input" id="ns-name" placeholder="Мой сервер" maxlength="100"><div class="input-error" id="ns-err"></div></div>';
+    S.ui.showModal("Создать сервер",b,[
+      {text:"Отмена",cls:"btn-secondary"},{text:"Создать",cls:"btn-primary",onClick:async()=>{const n=document.getElementById("ns-name").value.trim();if(!n){document.getElementById("ns-err").textContent="Введите название";return};await createServer(n);document.querySelector(".modal-overlay").remove()}}
+    ])
   }
-
-  async function createServer(name) {
-    const { data: server, error } = await sb.from("servers").insert({ name, owner_id: S.user.id }).select().single();
-    if (error) { S.ui.toast("Ошибка: " + error.message, "error"); return; }
-    await sb.from("server_members").insert({ server_id: server.id, user_id: S.user.id, role: "owner" });
-    await sb.from("channels").insert([{ server_id: server.id, name: "общий", type: "text", position: 0 }, { server_id: server.id, name: "Войс", type: "voice", position: 1 }]);
-    S.ui.toast("Сервер создан!", "success");
-    await loadServersSidebar();
-    selectServer(server.id);
+  async function createServer(name){
+    const{data:srv,error}=await sb.from("servers").insert({name,owner_id:S.user.id}).select().single();
+    if(error){S.ui.toast("Ошибка","error");return}
+    await sb.from("server_members").insert({server_id:srv.id,user_id:S.user.id,role:"owner"});
+    await sb.from("channels").insert([{server_id:srv.id,name:"общий",type:"text",position:0},{server_id:srv.id,name:"Войс",type:"voice",position:1}]);
+    S.ui.toast("Сервер создан!","success");await loadSidebarServers();selectServer(srv.id)
   }
-
-  function showCreateChannelModal(serverId) {
-    const body = `<div class="input-group"><label class="input-label">Название</label><input class="input" id="nc-name" placeholder="новый-канал" maxlength="100" /><div class="input-error" id="nc-error"></div></div><div class="input-group"><label class="input-label">Тип</label><select class="input" id="nc-type"><option value="text">Текстовый</option><option value="voice">Голосовой</option></select></div>`;
-    S.ui.showModal("Создать канал", body, [
-      { text: "Отмена", cls: "btn-secondary" },
-      { text: "Создать", cls: "btn-primary", onClick: async () => { const n = document.getElementById("nc-name").value.trim(); if (!n) { document.getElementById("nc-error").textContent="Введите название"; return; } const t = document.getElementById("nc-type").value; await sb.from("channels").insert({ server_id: serverId, name: n, type: t, position: S.channelsList.length }); S.ui.toast("Канал создан!","success"); renderServerChannels(serverId); document.querySelector(".modal-overlay").remove(); } }
-    ]);
+  function showCreateChannelModal(sid){
+    const b='<div class="input-group"><label class="input-label">Название</label><input class="input" id="nc-name" placeholder="новый-канал"><div class="input-error" id="nc-err"></div></div><div class="input-group"><label class="input-label">Тип</label><select class="input" id="nc-type"><option value="text">Текстовый</option><option value="voice">Голосовой</option></select></div>';
+    S.ui.showModal("Создать канал",b,[
+      {text:"Отмена",cls:"btn-secondary"},{text:"Создать",cls:"btn-primary",onClick:async()=>{const n=document.getElementById("nc-name").value.trim();if(!n){document.getElementById("nc-err").textContent="Введите название";return};const t=document.getElementById("nc-type").value;await sb.from("channels").insert({server_id:sid,name:n,type:t,position:S.channelsList.length});S.ui.toast("Канал создан!","success");renderChannels(sid);document.querySelector(".modal-overlay").remove()}}
+    ])
   }
-
-  S.servers = { loadServersSidebar, selectServer, showServersPage, showCreateServerModal, createServer, showCreateChannelModal, loadMembers };
+  S.servers={loadSidebarServers,selectServer,showPage,showCreateModal,createServer,loadMembers};
 })();
