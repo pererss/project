@@ -1,566 +1,269 @@
 // ============================================================
-// SENTCOR — Friends Module (Friend Requests, Friends List, DMs)
+// SENTCOR — Friends Module v2
+// Sub-panel, friend details, 3-dot menu, block/mute/call
 // ============================================================
 (function () {
   "use strict";
-
   const S = window.SENTCOR;
+  const sb = S.sb;
+  S.friendsList = []; S.pendingRequests = []; S.outgoingRequests = []; S.blockedList = [];
+  let currentFriend = null;
 
-  // --- STATE ---
-  S.friendsList = [];
-  S.pendingRequests = [];
-  S.outgoingRequests = [];
-  let currentDMFriend = null;
-
-  // --- SHOW FRIENDS PAGE ---
   async function showFriendsPage() {
-    // Deactivate server icons
-    document.querySelectorAll("#sidebar .server-icon").forEach((el) => el.classList.remove("active"));
-    const dmIcon = document.querySelector('.server-icon[data-server="dm"]');
-    if (dmIcon) dmIcon.classList.add("active");
-
-    // Reset server list header
-    const header = document.getElementById("server-list-header");
-    if (header) {
-      header.querySelector(".truncate").textContent = "Друзья";
-    }
-
-    // Clear channel list
-    const channelList = document.getElementById("channel-list");
-    if (channelList) {
-      channelList.innerHTML = renderFriendsChannelList();
-    }
-
-    // Load friends
-    await loadAllFriendsData();
-
-    // Show friends list in page area
-    renderFriendsTab("online");
+    S.ui.activateNav("friends");
+    const sp = document.getElementById("sub-panel"); if (sp) sp.classList.remove("collapsed");
+    S.ui.setSubPanelHeader("Друзья");
+    await loadAllData();
+    renderSubPanel();
   }
 
-  function renderFriendsChannelList() {
-    return `
-      <div class="channel-item active" data-friend-tab="online" style="font-weight:600;color:var(--text-bright);">
-        <span class="channel-icon">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="8" r="4"/><path d="M4 21v-1a8 8 0 0 1 8-8 8 8 0 0 1 8 8v1"/></svg>
-        </span>
-        <span class="channel-name">Все</span>
-      </div>
-      <div class="channel-item" data-friend-tab="pending">
-        <span class="channel-icon">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6L6 18M6 6l12 12"/></svg>
-        </span>
-        <span class="channel-name">Входящие</span>
-        ${S.pendingRequests.length > 0 ? `<span class="badge" style="margin-left:auto;">${S.pendingRequests.length}</span>` : ""}
-      </div>
-      <div class="channel-item" data-friend-tab="outgoing">
-        <span class="channel-icon">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z"/></svg>
-        </span>
-        <span class="channel-name">Исходящие</span>
-      </div>
-      <div class="channel-item" id="add-friend-nav-btn" style="color:var(--green);font-weight:600;">
-        <span class="channel-icon">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2M12 3v8M9 7h6"/><circle cx="9" cy="7" r="4"/></svg>
-        </span>
-        <span class="channel-name">Добавить друга</span>
-      </div>
-    `;
-  }
-
-  // --- LOAD ALL FRIENDS DATA ---
-  async function loadAllFriendsData() {
+  async function loadAllData() {
     if (!S.user) return;
-
-    // Load friends list
-    const { data: friends } = await S.sb
-      .from("friends")
-      .select("friend_id, user_id")
-      .or(`user_id.eq.${S.user.id},friend_id.eq.${S.user.id}`);
-
+    // Friends list
+    const { data: friends } = await sb.from("friends").select("friend_id, user_id, muted").or(`user_id.eq.${S.user.id},friend_id.eq.${S.user.id}`);
     if (friends) {
-      const friendIds = friends.map((f) =>
-        f.user_id === S.user.id ? f.friend_id : f.user_id
-      );
-
-      if (friendIds.length > 0) {
-        const { data: profiles } = await S.sb
-          .from("profiles")
-          .select("*")
-          .in("id", friendIds);
-        S.friendsList = profiles || [];
-      } else {
-        S.friendsList = [];
-      }
+      const friendIds = friends.map(f => f.user_id === S.user.id ? f.friend_id : f.user_id);
+      const muteMap = {}; friends.forEach(f => { const fid = f.user_id === S.user.id ? f.friend_id : f.user_id; muteMap[fid] = f.muted; });
+      if (friendIds.length) {
+        const { data: profiles } = await sb.from("profiles").select("*").in("id", friendIds);
+        S.friendsList = (profiles || []).map(p => ({ ...p, muted: muteMap[p.id] || false }));
+      } else S.friendsList = [];
     }
-
-    // Load pending incoming requests
-    const { data: pending } = await S.sb
-      .from("friend_requests")
-      .select("id, sender_id, created_at")
-      .eq("receiver_id", S.user.id)
-      .eq("status", "pending");
-
-    if (pending && pending.length > 0) {
-      const senderIds = pending.map((r) => r.sender_id);
-      const { data: profiles } = await S.sb
-        .from("profiles")
-        .select("*")
-        .in("id", senderIds);
-      const profileMap = {};
-      (profiles || []).forEach((p) => (profileMap[p.id] = p));
-      S.pendingRequests = pending.map((r) => ({
-        ...r,
-        profile: profileMap[r.sender_id] || {},
-      }));
-    } else {
-      S.pendingRequests = [];
-    }
-
-    // Load outgoing requests
-    const { data: outgoing } = await S.sb
-      .from("friend_requests")
-      .select("id, receiver_id, created_at, status")
-      .eq("sender_id", S.user.id)
-      .eq("status", "pending");
-
-    if (outgoing && outgoing.length > 0) {
-      const receiverIds = outgoing.map((r) => r.receiver_id);
-      const { data: profiles } = await S.sb
-        .from("profiles")
-        .select("*")
-        .in("id", receiverIds);
-      const profileMap = {};
-      (profiles || []).forEach((p) => (profileMap[p.id] = p));
-      S.outgoingRequests = outgoing.map((r) => ({
-        ...r,
-        profile: profileMap[r.receiver_id] || {},
-      }));
-    } else {
-      S.outgoingRequests = [];
-    }
+    // Pending incoming
+    const { data: pending } = await sb.from("friend_requests").select("id, sender_id").eq("receiver_id", S.user.id).eq("status", "pending");
+    if (pending && pending.length) {
+      const senderIds = pending.map(r => r.sender_id);
+      const { data: profiles } = await sb.from("profiles").select("*").in("id", senderIds);
+      const map = {}; (profiles || []).forEach(p => map[p.id] = p);
+      S.pendingRequests = pending.map(r => ({ ...r, profile: map[r.sender_id] || {} }));
+    } else S.pendingRequests = [];
+    // Outgoing
+    const { data: outgoing } = await sb.from("friend_requests").select("id, receiver_id").eq("sender_id", S.user.id).eq("status", "pending");
+    if (outgoing && outgoing.length) {
+      const receiverIds = outgoing.map(r => r.receiver_id);
+      const { data: profiles } = await sb.from("profiles").select("*").in("id", receiverIds);
+      const map = {}; (profiles || []).forEach(p => map[p.id] = p);
+      S.outgoingRequests = outgoing.map(r => ({ ...r, profile: map[r.receiver_id] || {} }));
+    } else S.outgoingRequests = [];
+    // Blocked
+    const { data: blocked } = await sb.from("blocked_users").select("blocked_id").eq("blocker_id", S.user.id);
+    if (blocked && blocked.length) {
+      const ids = blocked.map(b => b.blocked_id);
+      const { data: profiles } = await sb.from("profiles").select("*").in("id", ids);
+      S.blockedList = profiles || [];
+    } else S.blockedList = [];
   }
 
-  // --- RENDER FRIENDS TAB ---
-  async function renderFriendsTab(tab) {
-    await loadAllFriendsData();
-
-    // Update channel list active state
-    document.querySelectorAll("#channel-list .channel-item[data-friend-tab]").forEach((el) => {
-      el.classList.remove("active");
-      if (el.dataset.friendTab === tab) el.classList.add("active");
+  function renderSubPanel() {
+    let html = `<div style="padding:8px 12px;"><button class="btn btn-accent-outline" id="add-friend-btn" style="width:100%;justify-content:center;font-weight:700;">+ Добавить друга</button></div>`;
+    html += `<div class="sp-section-title">Друзья — ${S.friendsList.length}</div>`;
+    const online = S.friendsList.filter(f => f.status === "online" || f.status === "idle" || f.status === "dnd");
+    const offline = S.friendsList.filter(f => !online.includes(f));
+    [...online, ...offline].forEach(f => {
+      const av = f.avatar_url ? `<img src="${f.avatar_url}" />` : (f.display_name || f.username || "?").charAt(0).toUpperCase();
+      html += `<div class="sp-item-friend friend-list-item" data-friend-id="${f.id}">
+        <div class="avatar avatar-sm">${av}</div>
+        <span class="status-dot status-${f.status || "offline"}"></span>
+        <span class="friend-name">${S.escapeHtml(f.display_name || f.username)}</span>
+        ${f.game_status ? `<span class="friend-game">${S.escapeHtml(f.game_status)}</span>` : ""}
+      </div>`;
     });
-
-    // Re-render channel list to update badges
-    const channelList = document.getElementById("channel-list");
-    if (channelList) {
-      channelList.innerHTML = renderFriendsChannelList();
-      bindFriendsChannelEvents();
+    if (!S.friendsList.length) html += '<div style="padding:12px 16px;text-align:center;color:var(--text-muted);font-size:12px;">Нет друзей. Добавьте первого!</div>';
+    if (S.pendingRequests.length) {
+      html += `<div class="sp-section-title">Входящие — ${S.pendingRequests.length}</div>`;
+      S.pendingRequests.forEach(r => { const p = r.profile || {}; html += `<div class="sp-item-friend" data-pending-id="${r.id}" style="justify-content:space-between;"><div style="display:flex;align-items:center;gap:8px;"><span class="status-dot status-online"></span><span>${S.escapeHtml(p.username || "?")}</span></div><div style="display:flex;gap:4px;"><button class="btn btn-sm btn-primary accept-req" data-id="${r.id}">✓</button><button class="btn btn-sm btn-danger decline-req" data-id="${r.id}">✕</button></div></div>`; });
     }
-
-    // Close DM views
-    currentDMFriend = null;
-    const header = document.getElementById("server-list-header");
-    if (header) header.querySelector(".truncate").textContent = "Друзья";
-
-    let contentHtml = "";
-    const tabTitles = {
-      online: "Все друзья",
-      pending: "Входящие заявки",
-      outgoing: "Исходящие заявки",
-    };
-
-    if (tab === "online") {
-      contentHtml = renderAllFriends();
-    } else if (tab === "pending") {
-      contentHtml = renderPendingRequests();
-    } else if (tab === "outgoing") {
-      contentHtml = renderOutgoingRequests();
+    if (S.blockedList.length) {
+      html += `<div class="sp-section-title">Заблокированные — ${S.blockedList.length}</div>`;
+      S.blockedList.forEach(b => { html += `<div class="sp-item-friend"><span>🚫 ${S.escapeHtml(b.username || "?")}</span><button class="btn btn-sm btn-ghost unblock-btn" data-id="${b.id}" style="margin-left:auto;">Разблок.</button></div>`; });
     }
-
-    S.ui.showPage(
-      tabTitles[tab] || "Друзья",
-      `<button class="page-tab ${tab === "online" ? "active" : ""}" data-tab="online">Все</button>
-       <button class="page-tab ${tab === "pending" ? "active" : ""}" data-tab="pending">Входящие ${S.pendingRequests.length > 0 ? `<span class="badge" style="margin-left:6px;">${S.pendingRequests.length}</span>` : ""}</button>
-       <button class="page-tab ${tab === "outgoing" ? "active" : ""}" data-tab="outgoing">Исходящие</button>`,
-      contentHtml
-    );
-
-    // Tab click events
-    document.querySelectorAll(".page-tab").forEach((el) => {
-      el.addEventListener("click", () => renderFriendsTab(el.dataset.tab));
-    });
-
-    // Add friend button
-    const addFriendBtn = document.getElementById("add-friend-btn");
-    if (addFriendBtn) {
-      addFriendBtn.addEventListener("click", showAddFriendModal);
-    }
+    S.ui.setSubPanelContent(html);
+    bindSubPanelEvents();
   }
 
-  function bindFriendsChannelEvents() {
-    document.querySelectorAll("#channel-list .channel-item[data-friend-tab]").forEach((el) => {
-      el.addEventListener("click", () => renderFriendsTab(el.dataset.friendTab));
-    });
-    const addNavBtn = document.getElementById("add-friend-nav-btn");
-    if (addNavBtn) {
-      addNavBtn.addEventListener("click", showAddFriendModal);
-    }
+  function bindSubPanelEvents() {
+    document.getElementById("add-friend-btn").addEventListener("click", showAddFriendModal);
+    document.querySelectorAll(".friend-list-item").forEach(el => { el.addEventListener("click", () => openFriendDetail(el.dataset.friendId)); });
+    document.querySelectorAll(".accept-req").forEach(el => { el.addEventListener("click", e => { e.stopPropagation(); acceptRequest(el.dataset.id); }); });
+    document.querySelectorAll(".decline-req").forEach(el => { el.addEventListener("click", e => { e.stopPropagation(); declineRequest(el.dataset.id); }); });
+    document.querySelectorAll(".unblock-btn").forEach(el => { el.addEventListener("click", e => { e.stopPropagation(); unblockUser(el.dataset.id); }); });
   }
 
-  function renderAllFriends() {
-    const online = S.friendsList.filter((f) => f.status === "online" || f.status === "idle" || f.status === "dnd");
-    const offline = S.friendsList.filter((f) => f.status === "offline" || !f.status);
+  // ---- FRIEND DETAIL VIEW ----
+  async function openFriendDetail(friendId) {
+    const friend = S.friendsList.find(f => f.id === friendId);
+    if (!friend) return;
+    currentFriend = friend;
+    const isBlocked = S.blockedList.some(b => b.id === friendId);
+    const av = friend.avatar_url ? `<img src="${friend.avatar_url}" />` : (friend.display_name || friend.username || "?").charAt(0).toUpperCase();
+    const name = friend.display_name || friend.username;
+    const stMap = { online: "🟢 В сети", idle: "🟡 Не активен", dnd: "🔴 Не беспокоить", offline: "⚫ Не в сети" };
 
-    let html = '<div style="margin-bottom:20px;display:flex;align-items:center;justify-content:space-between;">';
-    html += `<span style="color:var(--text-muted);font-size:13px;">Всего друзей: ${S.friendsList.length} &middot; В сети: ${online.length}</span>`;
-    html += '<button class="btn btn-sm btn-primary" id="add-friend-btn">+ Добавить друга</button>';
-    html += "</div>";
-
-    if (S.friendsList.length === 0) {
-      html += '<div style="text-align:center;padding:40px;color:var(--text-muted);">У вас пока нет друзей. Добавьте первого друга!</div>';
-      return html;
-    }
-
-    // Online first
-    [...online, ...offline].forEach((f) => {
-      const avatar = f.avatar_url ? `style="background-image:url(${f.avatar_url});background-size:cover"` : "";
-      html += `
-        <div class="friend-card">
-          <div class="avatar" ${avatar}></div>
-          <span class="status-dot status-${f.status || "offline"}"></span>
-          <div class="friend-info">
-            <div class="friend-name">${S.escapeHtml(f.display_name || f.username)}</div>
-            <div class="friend-status">${f.game_status ? S.escapeHtml(f.game_status) : (f.status === "online" ? "В сети" : "Не в сети")}</div>
-          </div>
-          <div class="friend-actions">
-            <button class="btn btn-sm btn-secondary dm-friend-btn" data-friend-id="${f.id}" data-friend-name="${S.escapeHtml(f.display_name || f.username)}">💬 ЛС</button>
-            <button class="btn btn-sm btn-ghost remove-friend-btn" data-friend-id="${f.id}" title="Удалить">✕</button>
-          </div>
+    let html = `<div style="display:flex;flex-direction:column;height:100%;">
+      <div class="friend-detail-header">
+        <div class="friend-name">${S.escapeHtml(name)}</div>
+        <div class="friend-detail-actions">
+          <button class="btn btn-icon btn-ghost btn-sm" id="fd-menu-btn" title="Действия"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="5" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="12" cy="19" r="1"/></svg></button>
+          <button class="btn btn-icon btn-ghost btn-sm" id="fd-close-btn" title="Закрыть"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6L6 18M6 6l12 12"/></svg></button>
         </div>
-      `;
-    });
-
-    return html;
-  }
-
-  function renderPendingRequests() {
-    let html = "";
-    if (S.pendingRequests.length === 0) {
-      html += '<div style="text-align:center;padding:40px;color:var(--text-muted);">Нет входящих заявок.</div>';
-      return html;
-    }
-
-    S.pendingRequests.forEach((r) => {
-      const f = r.profile || {};
-      const avatar = f.avatar_url ? `style="background-image:url(${f.avatar_url});background-size:cover"` : "";
-      html += `
-        <div class="friend-card">
-          <div class="avatar" ${avatar}></div>
-          <div class="friend-info">
-            <div class="friend-name">${S.escapeHtml(f.display_name || f.username || "Неизвестный")}</div>
-            <div class="friend-status">Хочет добавить вас в друзья</div>
-          </div>
-          <div class="friend-actions">
-            <button class="btn btn-sm btn-primary accept-request-btn" data-request-id="${r.id}">✓ Принять</button>
-            <button class="btn btn-sm btn-danger decline-request-btn" data-request-id="${r.id}">✕ Отклонить</button>
-          </div>
-        </div>
-      `;
-    });
-
-    return html;
-  }
-
-  function renderOutgoingRequests() {
-    let html = "";
-    if (S.outgoingRequests.length === 0) {
-      html += '<div style="text-align:center;padding:40px;color:var(--text-muted);">Нет исходящих заявок.</div>';
-      return html;
-    }
-
-    S.outgoingRequests.forEach((r) => {
-      const f = r.profile || {};
-      const avatar = f.avatar_url ? `style="background-image:url(${f.avatar_url});background-size:cover"` : "";
-      html += `
-        <div class="friend-card">
-          <div class="avatar" ${avatar}></div>
-          <div class="friend-info">
-            <div class="friend-name">${S.escapeHtml(f.display_name || f.username || "Неизвестный")}</div>
-            <div class="friend-status">Заявка отправлена</div>
-          </div>
-          <div class="friend-actions">
-            <button class="btn btn-sm btn-ghost cancel-request-btn" data-request-id="${r.id}">Отменить</button>
-          </div>
-        </div>
-      `;
-    });
-
-    return html;
-  }
-
-  // --- DELEGATE EVENTS FOR FRIEND CARDS ---
-  // Called after each renderFriendsTab
-  function setupFriendEvents(container) {
-    if (!container) container = document;
-
-    // DM buttons
-    container.querySelectorAll(".dm-friend-btn").forEach((btn) => {
-      btn.addEventListener("click", () => {
-        const friendId = btn.dataset.friendId;
-        const friendName = btn.dataset.friendName;
-        openDM(friendId, friendName);
-      });
-    });
-
-    // Remove friend buttons
-    container.querySelectorAll(".remove-friend-btn").forEach((btn) => {
-      btn.addEventListener("click", () => {
-        const friendId = btn.dataset.friendId;
-        S.ui.confirm("Удалить друга", "Вы уверены, что хотите удалить этого друга?", async () => {
-          await S.sb.from("friends").delete().eq("user_id", S.user.id).eq("friend_id", friendId);
-          await S.sb.from("friends").delete().eq("user_id", friendId).eq("friend_id", S.user.id);
-          S.ui.toast("Друг удалён", "info");
-          renderFriendsTab("online");
-        });
-      });
-    });
-
-    // Accept request buttons
-    container.querySelectorAll(".accept-request-btn").forEach((btn) => {
-      btn.addEventListener("click", async () => {
-        const requestId = btn.dataset.requestId;
-        const req = S.pendingRequests.find((r) => r.id === requestId);
-        if (!req) return;
-
-        // Update request status
-        await S.sb.from("friend_requests").update({ status: "accepted" }).eq("id", requestId);
-        // Add to friends table both ways
-        await S.sb.from("friends").insert({ user_id: S.user.id, friend_id: req.sender_id });
-        await S.sb.from("friends").insert({ user_id: req.sender_id, friend_id: S.user.id });
-        S.ui.toast("Заявка принята!", "success");
-        renderFriendsTab("online");
-      });
-    });
-
-    // Decline request buttons
-    container.querySelectorAll(".decline-request-btn").forEach((btn) => {
-      btn.addEventListener("click", async () => {
-        const requestId = btn.dataset.requestId;
-        await S.sb.from("friend_requests").update({ status: "declined" }).eq("id", requestId);
-        S.ui.toast("Заявка отклонена", "info");
-        renderFriendsTab("pending");
-      });
-    });
-
-    // Cancel request buttons
-    container.querySelectorAll(".cancel-request-btn").forEach((btn) => {
-      btn.addEventListener("click", async () => {
-        const requestId = btn.dataset.requestId;
-        await S.sb.from("friend_requests").delete().eq("id", requestId);
-        S.ui.toast("Заявка отменена", "info");
-        renderFriendsTab("outgoing");
-      });
-    });
-  }
-
-  // --- SHOW ADD FRIEND MODAL ---
-  function showAddFriendModal() {
-    const bodyHtml = `
-      <div class="input-group">
-        <label class="input-label">Имя пользователя или Email</label>
-        <input class="input" id="add-friend-input" placeholder="Введите username или email..." />
-        <div class="input-error" id="add-friend-error"></div>
       </div>
-    `;
+      <div class="friend-detail-body">
+        <div class="friend-detail-card">
+          <div class="avatar avatar-lg">${av}</div>
+          <div class="detail-name">${S.escapeHtml(name)}</div>
+          <div class="detail-status">${stMap[friend.status] || "⚫ Не в сети"}</div>
+          ${friend.game_status ? `<div class="detail-game">🎮 ${S.escapeHtml(friend.game_status)}</div>` : ""}
+          ${friend.custom_status ? `<div style="font-size:12px;color:var(--text-secondary);margin-top:4px;">${S.escapeHtml(friend.custom_status)}</div>` : ""}
+        </div>
+        ${isBlocked ? '<div style="text-align:center;color:var(--red);font-size:13px;font-weight:600;">🚫 Пользователь заблокирован</div>' : `<div style="display:flex;gap:8px;flex-wrap:wrap;justify-content:center;"><button class="btn btn-primary btn-sm" id="fd-dm-btn">💬 Личные сообщения</button><button class="btn btn-secondary btn-sm" id="fd-call-btn">📞 Позвонить</button></div>`}
+        <div class="chat-messages" id="chat-messages" style="display:none;flex:1;overflow-y:auto;padding:8px 0;"></div>
+        <div class="chat-input-area" id="dm-input-area" style="display:none;"></div>
+      </div>
+    </div>`;
 
-    S.ui.showModal("Добавить друга", bodyHtml, [
+    S.ui.setMainContent(html);
+    S.ui.clearMembers();
+
+    // 3-dot menu
+    document.getElementById("fd-menu-btn").addEventListener("click", e => {
+      e.stopPropagation();
+      const items = [
+        { label: friend.muted ? "🔔 Включить уведомления" : "🔕 Без звука", action: () => toggleMuteFriend(friendId) },
+        { label: "📋 Копировать имя", action: () => { navigator.clipboard.writeText(friend.username); S.ui.toast("Имя скопировано", "info"); } },
+        { label: "➕ Добавить на сервер", action: () => showAddToServerModal(friendId) },
+        "separator",
+        { label: isBlocked ? "✅ Разблокировать" : "🚫 Заблокировать", danger: !isBlocked, action: () => { if (isBlocked) unblockUser(friendId); else blockUser(friendId); } },
+        { label: "🗑️ Удалить из друзей", danger: true, action: () => removeFriend(friendId) }
+      ];
+      const rect = e.target.getBoundingClientRect();
+      S.ui.showContextMenu(items, rect.left, rect.bottom);
+    });
+
+    document.getElementById("fd-close-btn").addEventListener("click", () => { currentFriend = null; renderSubPanel(); S.ui.showHomePage(); });
+    const dmBtn = document.getElementById("fd-dm-btn"); if (dmBtn) dmBtn.addEventListener("click", () => openDMView(friend));
+    const callBtn = document.getElementById("fd-call-btn"); if (callBtn) callBtn.addEventListener("click", () => callFriend(friend));
+  }
+
+  function openDMView(friend) {
+    const msgContainer = document.getElementById("chat-messages");
+    const inputArea = document.getElementById("dm-input-area");
+    if (!msgContainer || !inputArea) return;
+    // Hide card, show chat
+    const card = document.querySelector(".friend-detail-card"); if (card) card.style.display = "none";
+    document.querySelectorAll(".friend-detail-body > div").forEach(el => { if (el !== msgContainer && el !== inputArea && !el.classList.contains("friend-detail-card")) el.style.display = "none"; });
+    msgContainer.style.display = "flex";
+    inputArea.style.display = "block";
+    inputArea.innerHTML = `<div class="chat-input-wrapper"><textarea id="msg-input" rows="1" placeholder="Напишите сообщение..." maxlength="${S.SENTCOR_CONFIG.MAX_MESSAGE_LENGTH}"></textarea><button class="btn btn-icon btn-ghost" id="send-dm-btn"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z"/></svg></button></div>`;
+    const ta = document.getElementById("msg-input"), sbtn = document.getElementById("send-dm-btn");
+    ta.addEventListener("input", () => { ta.style.height = "auto"; ta.style.height = Math.min(ta.scrollHeight, 120) + "px"; });
+    const send = async () => { const c = ta.value.trim(); if (!c) return; ta.disabled = true; const { error } = await S.chat.sendDirectMessage(friend.id, c); if (error) { S.ui.toast("Ошибка", "error"); ta.disabled = false; } else { ta.value = ""; ta.style.height = "auto"; ta.disabled = false; ta.focus(); } };
+    ta.addEventListener("keydown", e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); } });
+    sbtn.addEventListener("click", send);
+    S.chat.loadDirectMessages(friend.id);
+  }
+
+  // ---- ACTIONS ----
+  async function toggleMuteFriend(friendId) {
+    const friend = S.friendsList.find(f => f.id === friendId);
+    if (!friend) return;
+    const newMuted = !friend.muted;
+    await sb.from("friends").update({ muted: newMuted }).eq("user_id", S.user.id).eq("friend_id", friendId);
+    friend.muted = newMuted;
+    S.ui.toast(newMuted ? "🔕 Уведомления отключены" : "🔔 Уведомления включены", "info");
+    openFriendDetail(friendId);
+  }
+
+  async function removeFriend(friendId) {
+    S.ui.confirm("Удалить друга", "Вы уверены?", async () => {
+      await sb.from("friends").delete().eq("user_id", S.user.id).eq("friend_id", friendId);
+      await sb.from("friends").delete().eq("user_id", friendId).eq("friend_id", S.user.id);
+      S.ui.toast("Друг удалён", "info");
+      currentFriend = null;
+      await loadAllData();
+      renderSubPanel();
+      S.ui.showHomePage();
+    });
+  }
+
+  async function blockUser(userId) {
+    S.ui.confirm("Заблокировать", "Заблокированный пользователь не сможет писать вам и видеть ваш онлайн.", async () => {
+      await sb.from("blocked_users").insert({ blocker_id: S.user.id, blocked_id: userId });
+      // remove from friends
+      await sb.from("friends").delete().eq("user_id", S.user.id).eq("friend_id", userId);
+      await sb.from("friends").delete().eq("user_id", userId).eq("friend_id", S.user.id);
+      S.ui.toast("Пользователь заблокирован", "info");
+      currentFriend = null;
+      await loadAllData();
+      renderSubPanel();
+      S.ui.showHomePage();
+    });
+  }
+
+  async function unblockUser(userId) {
+    await sb.from("blocked_users").delete().eq("blocker_id", S.user.id).eq("blocked_id", userId);
+    S.ui.toast("Пользователь разблокирован", "success");
+    await loadAllData();
+    renderSubPanel();
+    if (currentFriend && currentFriend.id === userId) openFriendDetail(userId);
+  }
+
+  async function callFriend(friend) {
+    // 1-on-1 call via LiveKit
+    const roomName = `sentcor_call_${[S.user.id, friend.id].sort().join("_")}`;
+    S.voice.startDirectCall(friend, roomName);
+  }
+
+  async function acceptRequest(requestId) {
+    const req = S.pendingRequests.find(r => r.id === requestId); if (!req) return;
+    await sb.from("friend_requests").update({ status: "accepted" }).eq("id", requestId);
+    await sb.from("friends").insert([{ user_id: S.user.id, friend_id: req.sender_id }, { user_id: req.sender_id, friend_id: S.user.id }]);
+    S.ui.toast("Заявка принята!", "success");
+    await loadAllData();
+    renderSubPanel();
+  }
+
+  async function declineRequest(requestId) {
+    await sb.from("friend_requests").update({ status: "declined" }).eq("id", requestId);
+    S.ui.toast("Заявка отклонена", "info");
+    await loadAllData();
+    renderSubPanel();
+  }
+
+  function showAddFriendModal() {
+    const body = `<div class="input-group"><label class="input-label">Имя пользователя</label><input class="input" id="af-username" placeholder="Введите username..." maxlength="32" /><div class="input-error" id="af-error"></div></div>`;
+    S.ui.showModal("Добавить друга", body, [
       { text: "Отмена", cls: "btn-secondary" },
-      {
-        text: "Отправить заявку",
-        cls: "btn-primary",
-        onClick: async () => {
-          const query = S.ui.$("#add-friend-input").value.trim();
-          if (!query) {
-            S.ui.$("#add-friend-error").textContent = "Введите имя пользователя или email";
-            return;
-          }
-          await sendFriendRequest(query);
-          S.ui.$(".modal-overlay").remove();
-        },
-      },
+      { text: "Отправить заявку", cls: "btn-primary", onClick: async () => { const q = document.getElementById("af-username").value.trim(); if (!q) { document.getElementById("af-error").textContent = "Введите имя"; return; } await sendFriendRequest(q); document.querySelector(".modal-overlay").remove(); } }
     ]);
   }
 
   async function sendFriendRequest(query) {
-    // Search by username or email
-    const { data: profiles, error } = await S.sb
-      .from("profiles")
-      .select("*")
-      .or(`username.eq.${query},id.eq.${query}`)
-      .limit(1);
-
-    if (error || !profiles || profiles.length === 0) {
-      // Try searching by email from auth
-      S.ui.toast("Пользователь не найден. Попробуйте username.", "error");
-      return;
-    }
-
+    const { data: profiles } = await sb.from("profiles").select("*").or(`username.eq.${query}`).limit(1);
+    if (!profiles || !profiles.length) { S.ui.toast("Пользователь не найден", "error"); return; }
     const target = profiles[0];
-
-    if (target.id === S.user.id) {
-      S.ui.toast("Нельзя добавить самого себя!", "error");
-      return;
-    }
-
-    // Check if already friends
-    const { data: existingFriend } = await S.sb
-      .from("friends")
-      .select("*")
-      .or(`and(user_id.eq.${S.user.id},friend_id.eq.${target.id}),and(user_id.eq.${target.id},friend_id.eq.${S.user.id})`)
-      .limit(1);
-
-    if (existingFriend && existingFriend.length > 0) {
-      S.ui.toast("Этот пользователь уже у вас в друзьях!", "info");
-      return;
-    }
-
-    // Check if request already exists
-    const { data: existingReq } = await S.sb
-      .from("friend_requests")
-      .select("*")
-      .or(`and(sender_id.eq.${S.user.id},receiver_id.eq.${target.id}),and(sender_id.eq.${target.id},receiver_id.eq.${S.user.id})`)
-      .eq("status", "pending")
-      .limit(1);
-
-    if (existingReq && existingReq.length > 0) {
-      S.ui.toast("Заявка уже отправлена!", "info");
-      return;
-    }
-
-    const { error: insertErr } = await S.sb.from("friend_requests").insert({
-      sender_id: S.user.id,
-      receiver_id: target.id,
-      status: "pending",
-    });
-
-    if (insertErr) {
-      S.ui.toast("Ошибка: " + (insertErr.message || "неизвестная"), "error");
-    } else {
-      S.ui.toast("Заявка отправлена!", "success");
-      renderFriendsTab("outgoing");
-    }
+    if (target.id === S.user.id) { S.ui.toast("Нельзя добавить себя!", "error"); return; }
+    // Check blocked
+    const { data: blockedCheck } = await sb.from("blocked_users").select("*").eq("blocker_id", target.id).eq("blocked_id", S.user.id).limit(1);
+    if (blockedCheck && blockedCheck.length) { S.ui.toast("Вы заблокированы этим пользователем", "error"); return; }
+    // Check already friends
+    const { data: friendCheck } = await sb.from("friends").select("*").or(`and(user_id.eq.${S.user.id},friend_id.eq.${target.id}),and(user_id.eq.${target.id},friend_id.eq.${S.user.id})`).limit(1);
+    if (friendCheck && friendCheck.length) { S.ui.toast("Уже в друзьях!", "info"); return; }
+    // Check existing request
+    const { data: reqCheck } = await sb.from("friend_requests").select("*").eq("status", "pending").or(`and(sender_id.eq.${S.user.id},receiver_id.eq.${target.id}),and(sender_id.eq.${target.id},receiver_id.eq.${S.user.id})`).limit(1);
+    if (reqCheck && reqCheck.length) { S.ui.toast("Заявка уже существует", "info"); return; }
+    const { error } = await sb.from("friend_requests").insert({ sender_id: S.user.id, receiver_id: target.id, status: "pending" });
+    if (error) { S.ui.toast("Ошибка: " + (error.message || "?"), "error"); }
+    else { S.ui.toast("Заявка отправлена!", "success"); await loadAllData(); renderSubPanel(); }
   }
 
-  // --- OPEN DM ---
-  async function openDM(friendId, friendName) {
-    currentDMFriend = { id: friendId, name: friendName };
-
-    // Update server list header
-    const header = document.getElementById("server-list-header");
-    if (header) header.querySelector(".truncate").textContent = friendName;
-
-    // Clear channel list — show DM context
-    const channelList = document.getElementById("channel-list");
-    if (channelList) {
-      channelList.innerHTML = `
-        <div class="channel-item active" data-back-to-friends="true">
-          <span class="channel-icon">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
-          </span>
-          <span class="channel-name">← Назад к друзьям</span>
-        </div>
-      `;
-      channelList.querySelector('[data-back-to-friends="true"]').addEventListener("click", () => {
-        S.friends.showFriendsPage();
-      });
-    }
-
-    // Render chat with DM input
-    const chatArea = document.getElementById("chat-area");
-    if (chatArea) {
-      chatArea.innerHTML = `
-        <div class="page-container">
-          <div class="chat-header">
-            <span>💬</span>
-            <span>${S.escapeHtml(friendName)}</span>
-          </div>
-          <div class="chat-messages" id="chat-messages">
-            <div class="empty-state">
-              <h3>Личные сообщения с ${S.escapeHtml(friendName)}</h3>
-              <p>Напишите что-нибудь!</p>
-            </div>
-          </div>
-          <div class="chat-input-area" id="chat-input-area">
-            <div class="chat-input-wrapper">
-              <textarea id="msg-input" rows="1" placeholder="Напишите сообщение..." maxlength="${S.SENTCOR_CONFIG.MAX_MESSAGE_LENGTH}"></textarea>
-              <button class="btn btn-icon btn-ghost tooltip" data-tooltip="Отправить" id="send-msg-btn">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z"/></svg>
-              </button>
-            </div>
-          </div>
-        </div>
-      `;
-
-      // Input event
-      const textarea = document.getElementById("msg-input");
-      const sendBtn = document.getElementById("send-msg-btn");
-
-      textarea.addEventListener("input", () => {
-        textarea.style.height = "auto";
-        textarea.style.height = Math.min(textarea.scrollHeight, 120) + "px";
-      });
-
-      const sendDM = async () => {
-        const content = textarea.value.trim();
-        if (!content) return;
-        textarea.disabled = true;
-        const { error } = await S.chat.sendDirectMessage(friendId, content);
-        if (error) {
-          S.ui.toast("Ошибка: " + S.ui.getErrorMessage(error), "error");
-          textarea.disabled = false;
-        } else {
-          textarea.value = "";
-          textarea.style.height = "auto";
-          textarea.disabled = false;
-          textarea.focus();
-        }
-      };
-
-      textarea.addEventListener("keydown", (e) => {
-        if (e.key === "Enter" && !e.shiftKey) {
-          e.preventDefault();
-          sendDM();
-        }
-      });
-      sendBtn.addEventListener("click", sendDM);
-    }
-
-    // Clear members
-    const membersList = document.getElementById("members-list");
-    if (membersList) membersList.innerHTML = "";
-
-    // Load DM messages
-    S.chat.loadDirectMessages(friendId);
+  function showAddToServerModal(friendId) {
+    if (!S.serversList.length) { S.ui.toast("Вы не состоите ни в одном сервере", "info"); return; }
+    let html = '<div style="display:flex;flex-direction:column;gap:4px;">';
+    S.serversList.forEach(s => { html += `<button class="btn btn-ghost add-to-server-btn" data-server-id="${s.id}" style="justify-content:flex-start;">${S.escapeHtml(s.name)}</button>`; });
+    html += '</div>';
+    S.ui.showModal("Выберите сервер", html, [{ text: "Отмена", cls: "btn-secondary" }]);
+    document.querySelectorAll(".add-to-server-btn").forEach(btn => { btn.addEventListener("click", async () => { const sid = btn.dataset.serverId; await sb.from("server_members").insert({ server_id: sid, user_id: friendId, role: "member" }); S.ui.toast("Приглашение отправлено!", "success"); document.querySelector(".modal-overlay").remove(); }); });
   }
 
-  // --- OVERRIDE renderFriendsTab to attach events ---
-  const originalRenderFriendsTab = renderFriendsTab;
-  renderFriendsTab = async function (tab) {
-    await originalRenderFriendsTab(tab);
-    // Small delay to let DOM update
-    setTimeout(() => setupFriendEvents(), 50);
-  };
-
-  // --- EXPORT ---
-  S.friends = {
-    showFriendsPage,
-    renderFriendsTab,
-    loadAllFriendsData,
-    showAddFriendModal,
-    openDM,
-    get currentDMFriend() {
-      return currentDMFriend;
-    },
-  };
+  S.friends = { showFriendsPage, loadAllData, openFriendDetail, showAddFriendModal, sendFriendRequest, blockUser, unblockUser };
 })();

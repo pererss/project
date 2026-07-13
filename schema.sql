@@ -1,22 +1,22 @@
 -- ============================================================
--- SENTCOR — Схема базы данных для Supabase
--- Запусти этот скрипт в SQL Editor в Supabase Dashboard
--- (https://sbjcaednbqzmaemqgqfu.supabase.co)
+-- SENTCOR — Полная схема БД v2
 -- ============================================================
 
--- 1. ПРОФИЛИ
+-- 1. ПРОФИЛИ (добавлены theme, last_username_change)
 CREATE TABLE profiles (
-  id          UUID PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
-  username    TEXT UNIQUE NOT NULL,
-  display_name TEXT,
-  avatar_url  TEXT,
-  status      TEXT DEFAULT 'offline' CHECK (status IN ('online','idle','dnd','offline')),
-  game_status TEXT,
-  custom_status TEXT,
-  sent_coins  BIGINT DEFAULT 0,
-  streak_days INT DEFAULT 0,
-  last_login  TIMESTAMPTZ DEFAULT now(),
-  created_at  TIMESTAMPTZ DEFAULT now()
+  id             UUID PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
+  username       TEXT UNIQUE NOT NULL,
+  display_name   TEXT,
+  avatar_url     TEXT,
+  status         TEXT DEFAULT 'offline' CHECK (status IN ('online','idle','dnd','offline')),
+  game_status    TEXT,
+  custom_status  TEXT,
+  sent_coins     BIGINT DEFAULT 0,
+  streak_days    INT DEFAULT 0,
+  theme          TEXT DEFAULT 'caramel' CHECK (theme IN ('caramel','oled','midnight')),
+  last_username_change TIMESTAMPTZ DEFAULT now(),
+  last_login     TIMESTAMPTZ DEFAULT now(),
+  created_at     TIMESTAMPTZ DEFAULT now()
 );
 ALTER TABLE profiles ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "profiles_select" ON profiles FOR SELECT USING (true);
@@ -92,8 +92,13 @@ CREATE POLICY "messages_insert" ON messages FOR INSERT
   WITH CHECK (auth.uid() = sender_id AND EXISTS (SELECT 1 FROM channels c
     JOIN server_members sm ON sm.server_id = c.server_id
     WHERE c.id = messages.channel_id AND sm.user_id = auth.uid() AND c.type = 'text'));
+-- Любой может удалить своё; владелец/админ сервера — любое в своём сервере
+CREATE POLICY "messages_delete" ON messages FOR DELETE
+  USING (auth.uid() = sender_id OR EXISTS (
+    SELECT 1 FROM channels c JOIN server_members sm ON sm.server_id = c.server_id
+    WHERE c.id = messages.channel_id AND sm.user_id = auth.uid() AND sm.role IN ('owner','admin')
+  ));
 CREATE POLICY "messages_update" ON messages FOR UPDATE USING (auth.uid() = sender_id);
-CREATE POLICY "messages_delete" ON messages FOR DELETE USING (auth.uid() = sender_id);
 
 -- 6. ЗАЯВКИ В ДРУЗЬЯ
 CREATE TABLE friend_requests (
@@ -108,20 +113,35 @@ ALTER TABLE friend_requests ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "fr_select" ON friend_requests FOR SELECT USING (auth.uid() = sender_id OR auth.uid() = receiver_id);
 CREATE POLICY "fr_insert" ON friend_requests FOR INSERT WITH CHECK (auth.uid() = sender_id);
 CREATE POLICY "fr_update" ON friend_requests FOR UPDATE USING (auth.uid() = receiver_id OR auth.uid() = sender_id);
+CREATE POLICY "fr_delete" ON friend_requests FOR DELETE USING (auth.uid() = sender_id OR auth.uid() = receiver_id);
 
--- 7. ДРУЗЬЯ
+-- 7. ДРУЗЬЯ (добавлен muted)
 CREATE TABLE friends (
   user_id    UUID NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
   friend_id  UUID NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+  muted      BOOLEAN DEFAULT false,
   created_at TIMESTAMPTZ DEFAULT now(),
   PRIMARY KEY (user_id, friend_id)
 );
 ALTER TABLE friends ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "friends_select" ON friends FOR SELECT USING (auth.uid() = user_id OR auth.uid() = friend_id);
 CREATE POLICY "friends_insert" ON friends FOR INSERT WITH CHECK (auth.uid() = user_id);
+CREATE POLICY "friends_update" ON friends FOR UPDATE USING (auth.uid() = user_id);
 CREATE POLICY "friends_delete" ON friends FOR DELETE USING (auth.uid() = user_id OR auth.uid() = friend_id);
 
--- 8. ЛИЧНЫЕ СООБЩЕНИЯ
+-- 8. БЛОКИРОВКИ
+CREATE TABLE blocked_users (
+  blocker_id UUID NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+  blocked_id UUID NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+  created_at TIMESTAMPTZ DEFAULT now(),
+  PRIMARY KEY (blocker_id, blocked_id)
+);
+ALTER TABLE blocked_users ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "blocked_select" ON blocked_users FOR SELECT USING (auth.uid() = blocker_id);
+CREATE POLICY "blocked_insert" ON blocked_users FOR INSERT WITH CHECK (auth.uid() = blocker_id);
+CREATE POLICY "blocked_delete" ON blocked_users FOR DELETE USING (auth.uid() = blocker_id);
+
+-- 9. ЛИЧНЫЕ СООБЩЕНИЯ
 CREATE TABLE direct_messages (
   id         UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   sender_id  UUID NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
@@ -134,8 +154,9 @@ CREATE TABLE direct_messages (
 ALTER TABLE direct_messages ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "dm_select" ON direct_messages FOR SELECT USING (auth.uid() = sender_id OR auth.uid() = receiver_id);
 CREATE POLICY "dm_insert" ON direct_messages FOR INSERT WITH CHECK (auth.uid() = sender_id);
+CREATE POLICY "dm_delete" ON direct_messages FOR DELETE USING (auth.uid() = sender_id);
 
--- 9. ГОЛОСОВЫЕ УЧАСТНИКИ
+-- 10. ГОЛОСОВЫЕ УЧАСТНИКИ
 CREATE TABLE voice_participants (
   channel_id UUID NOT NULL REFERENCES channels(id) ON DELETE CASCADE,
   user_id    UUID NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
@@ -147,7 +168,7 @@ CREATE POLICY "vp_select" ON voice_participants FOR SELECT USING (true);
 CREATE POLICY "vp_insert" ON voice_participants FOR INSERT WITH CHECK (auth.uid() = user_id);
 CREATE POLICY "vp_delete" ON voice_participants FOR DELETE USING (auth.uid() = user_id);
 
--- 10. ЕЖЕДНЕВНЫЕ ЛОГИНЫ
+-- 11. ЕЖЕДНЕВНЫЕ ЛОГИНЫ
 CREATE TABLE daily_logins (
   user_id   UUID NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
   login_date DATE NOT NULL DEFAULT CURRENT_DATE,
@@ -163,6 +184,7 @@ CREATE INDEX idx_dm_users ON direct_messages(sender_id, receiver_id, created_at 
 CREATE INDEX idx_fr_receiver ON friend_requests(receiver_id);
 CREATE INDEX idx_sm_user ON server_members(user_id);
 CREATE INDEX idx_channels_server ON channels(server_id);
+CREATE INDEX idx_blocked ON blocked_users(blocker_id);
 
 -- АВТО-СОЗДАНИЕ ПРОФИЛЯ
 CREATE OR REPLACE FUNCTION create_profile_for_new_user()
