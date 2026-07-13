@@ -8,7 +8,7 @@
   <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🎮</text></svg>" />
   <link rel="stylesheet" href="css/style.css" />
   <!-- Font Awesome 6 -->
-  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" />
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" rel="noopener noreferrer" />
   <!-- Supabase JS SDK -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <!-- LiveKit Client SDK -->
@@ -28,12 +28,36 @@
   <script src="js/voice.js"></script>
 
   <script>
-    (async function(){
-      const S=window.SENTCOR;
-      S.ui.showAuth();
-      const ok=await S.auth.initSession();
-      if(ok){await S.auth.setOnlineStatus("online");S.ui.showApp()}
-      window.addEventListener("beforeunload",()=>{if(S.user){const u=S.SENTCOR_CONFIG.SUPABASE_URL+"/rest/v1/profiles?id=eq."+S.user.id;navigator.sendBeacon(u,new Blob([JSON.stringify({status:"offline",last_login:new Date().toISOString()})],{type:"application/json"}))}})
+    (function(){
+      // Safe init: guard against missing modules
+      try{
+        (async function(){
+          const S = window.SENTCOR || {};
+          if (S.ui && typeof S.ui.showAuth === 'function') S.ui.showAuth();
+          // initSession may be undefined if auth module failed to load
+          if (S.auth && typeof S.auth.initSession === 'function'){
+            const ok = await S.auth.initSession();
+            if (ok){
+              try{ await S.auth.setOnlineStatus("online"); }catch(e){}
+              if (S.ui && typeof S.ui.showApp === 'function') S.ui.showApp();
+            }
+          }
+
+          // beforeunload: send a lightweight beacon to set status offline
+          window.addEventListener('beforeunload', function(){
+            try{
+              if (window.navigator && window.navigator.sendBeacon && window.SENTCOR && window.SENTCOR.user){
+                const S2 = window.SENTCOR;
+                const url = (S2.SENTCOR_CONFIG && S2.SENTCOR_CONFIG.SUPABASE_URL ? S2.SENTCOR_CONFIG.SUPABASE_URL : '') + '/rest/v1/profiles?id=eq.' + S2.user.id;
+                const payload = JSON.stringify({ status: 'offline', last_login: new Date().toISOString() });
+                navigator.sendBeacon(url, new Blob([payload], { type: 'application/json' }));
+              }
+            }catch(e){ /* ignore */ }
+          });
+        })();
+      }catch(e){
+        console.warn('SENTCOR init failed', e);
+      }
     })();
   </script>
 </body>

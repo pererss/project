@@ -1,10 +1,12 @@
 // ============================================================
-// SENTCOR — Configuration v2
+// SENTCOR — Configuration (template)
 // ============================================================
+// Copy this file to js/config.js and fill values before deploying.
+
 window.SENTCOR_CONFIG = {
-  SUPABASE_URL: "https://sbjcaednbqzmaemqgqfu.supabase.co",
-  SUPABASE_ANON_KEY: "sb_publishable_L8uG-22xzKFGHrX--GO3ZQ_Pj8pU4v7",
-  LIVEKIT_URL: "wss://sentcor-mya3q8re.livekit.cloud",
+  SUPABASE_URL: "https://<your-project-ref>.supabase.co",
+  SUPABASE_ANON_KEY: "<YOUR_SUPABASE_ANON_KEY>",
+  LIVEKIT_URL: "wss://<your-livekit-host>",
   APP_NAME: "SENTCOR",
   APP_VERSION: "2.0.0",
   MAX_MESSAGE_LENGTH: 2000,
@@ -14,3 +16,7 @@ window.SENTCOR_CONFIG = {
   THEMES: ["caramel", "oled", "midnight"],
   DEFAULT_THEME: "caramel"
 };
+
+if (window.SENTCOR_CONFIG && (window.SENTCOR_CONFIG.SUPABASE_URL.includes('<') || window.SENTCOR_CONFIG.SUPABASE_ANON_KEY.includes('<'))){
+  console.warn('SENTCOR_CONFIG contains placeholder values. Please copy js/config.js.example -> js/config.js and fill in real values.');
+}

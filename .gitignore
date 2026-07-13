@@ -1,0 +1,5 @@
+# Ignore local config and node_modules
+js/config.js
+node_modules/
+.env
+.DS_Store
