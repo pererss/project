@@ -79,7 +79,7 @@
   }
   function setSubPanelHeader(t){const h=document.getElementById("sp-title");if(h)h.textContent=t}
   function setSubPanelContent(h){const c=document.getElementById("sp-content");if(c)c.innerHTML=h}
-  function setMainContent(h){const m=document.getElementById("main-area");if(m){m.innerHTML=h;const mc=m.querySelector(".main-content");if(mc)mc.style.animation="slideInRight 250ms var(--ease)"}}
+  function setMainContent(h){const m=document.getElementById("main-area");if(m){m.innerHTML=h}}
   function clearMembers(){const ml=document.getElementById("members-list");if(ml)ml.innerHTML=""}
   function setMembersContent(h){const ml=document.getElementById("members-list");if(ml)ml.innerHTML=h}
 
