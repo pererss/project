@@ -1,252 +1,119 @@
-// SENTCOR v4.1 — Servers (full context menu, fixed creation)
+// SENTCOR v5 — Servers (⋮ menus, channel rename, member actions, discover, avatar)
 (function(){
   const S=window.SENTCOR,sb=S.sb;
   S.serversList=[];S.channelsList=[];S.activeServer=null;S.activeChannel=null;
 
   function Q(s){return document.querySelectorAll(s)}
 
-  // ---- LOAD SERVERS INTO SIDEBAR ----
   async function loadSidebarServers(){
     if(!S.user)return;
-    const{data:m,error:me}=await sb.from("server_members").select("server_id").eq("user_id",S.user.id);
-    if(me){console.error("Load memberships:",me.message);renderSidebar([]);return}
-    if(!m||!m.length){renderSidebar([]);return}
+    const{data:m}=await sb.from("server_members").select("server_id").eq("user_id",S.user.id);
+    if(!m||!m.length){document.getElementById("sidebar-servers").innerHTML="";return}
     const ids=m.map(x=>x.server_id);
     const{data:srv}=await sb.from("servers").select("*").in("id",ids).order("created_at");
-    S.serversList=srv||[];renderSidebar(S.serversList)
-  }
-
-  function renderSidebar(srvs){
+    S.serversList=srv||[];
     const ct=document.getElementById("sidebar-servers");if(!ct)return;
-    let h="";srvs.forEach(s=>{
-      const ini=s.name.charAt(0).toUpperCase();
-      h+=`<div class="server-icon-nav" data-sid="${s.id}" title="${S.escapeHtml(s.name)}"><span>${ini}</span></div>`
-    });
-    ct.innerHTML=h;
-    ct.querySelectorAll(".server-icon-nav").forEach(el=>{
-      el.addEventListener("click",()=>selectServer(el.dataset.sid));
-      el.addEventListener("contextmenu",e=>{e.preventDefault();showServerContextMenu(el.dataset.sid,e.clientX,e.clientY)})
-    })
+    let h="";S.serversList.forEach(s=>{const ini=s.name.charAt(0).toUpperCase();h+=`<div class="server-icon-nav" data-sid="${s.id}" title="${S.escapeHtml(s.name)}"><span>${ini}</span></div>`});
+    ct.innerHTML=h;ct.querySelectorAll(".server-icon-nav").forEach(el=>el.addEventListener("click",()=>selectServer(el.dataset.sid)))
   }
 
-  // ---- SERVER CONTEXT MENU ----
-  function showServerContextMenu(sid,x,y){
-    const srv=S.serversList.find(s=>s.id===sid);if(!srv)return;
-    const isOwner=srv.owner_id===S.user.id;
-    const items=[];
-    if(isOwner){
-      items.push({label:'<i class="fa-solid fa-pen-to-square"></i> Редактировать',action:()=>showEditServerModal(sid)});
-      items.push({label:'<i class="fa-solid fa-user-plus"></i> Пригласить участника',action:()=>showInviteModal(sid)});
-      items.push({label:'<i class="fa-solid fa-list"></i> Управление каналами',action:()=>showChannelManagerModal(sid)});
-      items.push({label:'<i class="fa-solid fa-users-gear"></i> Роли участников',action:()=>showRolesModal(sid)});
-      items.push("sep");
-      items.push({label:'<i class="fa-solid fa-trash"></i> Удалить сервер',danger:true,action:()=>deleteServer(sid)});
-    }else{
-      items.push({label:'<i class="fa-solid fa-right-from-bracket"></i> Покинуть сервер',danger:true,action:()=>leaveServer(sid)});
-    }
-    S.ui.showContextMenu(items,x,y)
-  }
-
-  // ---- SELECT SERVER ----
   async function selectServer(sid){
-    S.activeServer=sid;
-    Q("#sidebar .sidebar-nav").forEach(e=>e.classList.remove("active"));
-    Q("#sidebar .server-icon-nav").forEach(e=>e.classList.remove("active"));
+    S.activeServer=sid;Q("#sidebar .sidebar-nav").forEach(e=>e.classList.remove("active"));Q("#sidebar .server-icon-nav").forEach(e=>e.classList.remove("active"));
     const icon=document.querySelector(`.server-icon-nav[data-sid="${sid}"]`);if(icon)icon.classList.add("active");
     const srv=S.serversList.find(s=>s.id===sid);if(!srv)return;
     const sp=document.getElementById("sub-panel");if(sp)sp.classList.remove("collapsed");
-    S.ui.setSubPanelHeader(srv.name);
-    await renderChannels(sid)
+    S.ui.setSubPanelHeader(srv.name);await renderChannels(sid);document.title="Sentcor - "+srv.name
   }
 
-  // ---- RENDER CHANNELS ----
   async function renderChannels(sid){
-    const{data:ch}=await sb.from("channels").select("*").eq("server_id",sid).order("position");
-    S.channelsList=ch||[];
-    const srv=S.serversList.find(s=>s.id===sid);
-    const isOwner=srv&&srv.owner_id===S.user.id;
+    const{data:ch}=await sb.from("channels").select("*").eq("server_id",sid).order("position");S.channelsList=ch||[];
+    const srv=S.serversList.find(s=>s.id===sid);const isOwner=srv&&srv.owner_id===S.user.id;
     const txt=S.channelsList.filter(c=>c.type==="text"),vc=S.channelsList.filter(c=>c.type==="voice");
-    let h="";
-    if(txt.length){h+='<div class="sp-section-title">Текстовые каналы</div>';txt.forEach(c=>h+=`<div class="sp-item" data-chid="${c.id}"><i class="fa-solid fa-hashtag" style="width:18px;text-align:center;"></i> <span>${S.escapeHtml(c.name)}</span></div>`)}
-    if(vc.length){h+='<div class="sp-section-title">Голосовые каналы</div>';vc.forEach(c=>h+=`<div class="sp-item" data-chid="${c.id}"><i class="fa-solid fa-volume-high" style="width:18px;text-align:center;"></i> <span>${S.escapeHtml(c.name)}</span></div>`)}
+    let h=`<div style="display:flex;align-items:center;justify-content:space-between;padding:8px 12px;"><span style="font-weight:700;font-size:14px;color:var(--text-bright);">${S.escapeHtml(srv.name)}</span><button class="btn btn-icon btn-ghost btn-sm" id="server-dots-btn"><i class="fa-solid fa-ellipsis-vertical"></i></button></div>`;
+    if(txt.length){h+='<div class="sp-section-title">Текстовые каналы</div>';txt.forEach(c=>h+=`<div class="sp-item" data-chid="${c.id}"><i class="fa-solid fa-hashtag" style="width:18px;text-align:center;"></i> <span>${S.escapeHtml(c.name)}</span>${isOwner?`<button class="btn btn-icon btn-ghost btn-sm ch-dots-btn" data-chid="${c.id}" data-chname="${S.escapeHtml(c.name)}" style="margin-left:auto;font-size:10px;"><i class="fa-solid fa-ellipsis-vertical"></i></button>`:""}</div>`)}
+    if(vc.length){h+='<div class="sp-section-title">Голосовые каналы</div>';vc.forEach(c=>h+=`<div class="sp-item" data-chid="${c.id}"><i class="fa-solid fa-volume-high" style="width:18px;text-align:center;"></i> <span>${S.escapeHtml(c.name)}</span>${isOwner?`<button class="btn btn-icon btn-ghost btn-sm ch-dots-btn" data-chid="${c.id}" data-chname="${S.escapeHtml(c.name)}" style="margin-left:auto;font-size:10px;"><i class="fa-solid fa-ellipsis-vertical"></i></button>`:""}</div>`)}
     if(!S.channelsList.length)h='<div style="padding:16px;text-align:center;color:var(--text-muted);font-size:12px;">Нет каналов</div>';
     if(isOwner)h+='<div class="sp-item" id="add-ch-btn" style="color:var(--green);font-weight:600;"><i class="fa-solid fa-plus" style="width:18px;"></i> <span>Добавить канал</span></div>';
     S.ui.setSubPanelContent(h);
-    document.querySelectorAll("#sp-content .sp-item[data-chid]").forEach(el=>el.addEventListener("click",()=>{
-      const channel=S.channelsList.find(c=>c.id===el.dataset.chid);if(!channel)return;
-      S.activeChannel=channel;S.ui.resetCompact();S.ui.renderChatView(channel);S.chat.loadMessages(channel.id);loadMembers(sid)
-    }));
-    const addBtn=document.getElementById("add-ch-btn");if(addBtn)addBtn.addEventListener("click",()=>showCreateChannelModal(sid));
+    document.getElementById("server-dots-btn")?.addEventListener("click",e=>{e.stopPropagation();const items=isOwner?[{label:'<i class="fa-solid fa-pen-to-square"></i> Редактировать сервер',action:()=>showEditServerModal(sid)},{label:'<i class="fa-solid fa-user-plus"></i> Пригласить участника',action:()=>showInviteModal(sid)},{label:'<i class="fa-solid fa-list"></i> Управление каналами',action:()=>showChannelManagerModal(sid)},{label:'<i class="fa-solid fa-users-gear"></i> Роли участников',action:()=>showRolesModal(sid)},"sep",{label:'<i class="fa-solid fa-trash"></i> Удалить сервер',danger:true,action:()=>deleteServer(sid)}]:[{label:'<i class="fa-solid fa-right-from-bracket"></i> Покинуть сервер',danger:true,action:()=>leaveServer(sid)}];S.ui.showContextMenu(items,e.clientX,e.clientY)});
+    document.querySelectorAll("#sp-content .sp-item[data-chid]").forEach(el=>el.addEventListener("click",e=>{if(e.target.closest(".ch-dots-btn"))return;const channel=S.channelsList.find(c=>c.id===el.dataset.chid);if(!channel)return;S.activeChannel=channel;S.ui.resetCompact();S.ui.renderChatView(channel);S.chat.loadMessages(channel.id);loadMembers(sid)}));
+    document.querySelectorAll(".ch-dots-btn").forEach(btn=>btn.addEventListener("click",e=>{e.stopPropagation();S.ui.showContextMenu([{label:'<i class="fa-solid fa-pen-to-square"></i> Переименовать',action:()=>{const nn=prompt("Новое название:",btn.dataset.chname);if(nn&&nn.trim())sb.from("channels").update({name:nn.trim()}).eq("id",btn.dataset.chid).then(()=>{S.ui.toast("Переименовано!","success");renderChannels(sid)})}},{label:'<i class="fa-solid fa-trash"></i> Удалить',danger:true,action:()=>S.ui.confirm("Удалить канал?","Cообщения пропадут.",async()=>{await sb.from("channels").delete().eq("id",btn.dataset.chid);S.ui.toast("Канал удалён","info");renderChannels(sid)})}],e.clientX,e.clientY)}));
+    document.getElementById("add-ch-btn")?.addEventListener("click",()=>showCreateChannelModal(sid));
     await loadMembers(sid);
     S.ui.setMainContent(`<div class="main-content" style="display:flex;align-items:center;justify-content:center;"><div style="text-align:center;color:var(--text-muted);"><i class="fa-solid fa-arrow-left" style="font-size:48px;opacity:0.3;display:block;margin-bottom:16px;"></i><h3>Выберите канал</h3><p style="font-size:13px;">Нажмите на канал слева</p></div></div>`)
   }
 
-  // ---- LOAD MEMBERS ----
   async function loadMembers(sid){
     try{
-      const{data:mm}=await sb.from("server_members").select("user_id,role").eq("server_id",sid);
-      if(!mm)return;
-      const me=mm.find(m=>m.user_id===S.user.id);S.ui.isAdmin=me&&(me.role==="owner"||me.role==="admin");
-      const ids=mm.map(m=>m.user_id);
-      const{data:pr}=await sb.from("profiles").select("*").in("id",ids);
-      if(pr)S.ui.renderMembers(pr)
+      const{data:mm}=await sb.from("server_members").select("user_id,role").eq("server_id",sid);if(!mm)return;
+      const me=mm.find(m=>m.user_id===S.user.id);S.ui.isAdmin=me&&(me.role==="owner"||me.role==="admin");const isOwner=me&&me.role==="owner";
+      const ids=mm.map(m=>m.user_id);const{data:pr}=await sb.from("profiles").select("*").in("id",ids);if(!pr){S.ui.clearMembers();return}
+      const on=pr.filter(m=>m.status==="online"||m.status==="idle"||m.status==="dnd"),off=pr.filter(m=>!on.includes(m));
+      let h="";if(on.length){h+=`<div class="sp-section-title">В сети — ${on.length}</div>`;on.forEach(m=>h+=memberItem(m,isOwner,sid))}
+      if(off.length){h+=`<div class="sp-section-title">Не в сети — ${off.length}</div>`;off.forEach(m=>h+=memberItem(m,isOwner,sid))}
+      S.ui.setMembersContent(h);
+      document.querySelectorAll(".member-dots-btn").forEach(btn=>btn.addEventListener("click",e=>{e.stopPropagation();const uid=btn.dataset.uid,uname=btn.dataset.uname,isFriend=S.friendsList.some(f=>f.id===uid);const items=[{label:'<i class="fa-solid fa-user"></i> Посмотреть профиль',action:()=>S.friends.openDetail(uid)}];if(isFriend)items.push({label:'<i class="fa-solid fa-user-minus"></i> Удалить из друзей',danger:true,action:()=>S.friends.unblock(uid)});else items.push({label:'<i class="fa-solid fa-user-plus"></i> Отправить заявку',action:()=>S.friends.sendReq(uname)});if(isOwner&&uid!==S.user.id)items.push({label:'<i class="fa-solid fa-eject"></i> Удалить из сервера',danger:true,action:()=>{sb.from("server_members").delete().eq("server_id",sid).eq("user_id",uid).then(()=>{S.ui.toast("Участник удалён","info");loadMembers(sid)})}});S.ui.showContextMenu(items,e.clientX,e.clientY)}))
     }catch(e){console.error("loadMembers:",e)}
   }
 
-  // ---- SHOW SERVERS PAGE ----
+  function memberItem(m,isOwner,sid){
+    const av=m.avatar_url?`<img src="${m.avatar_url}">`:(m.display_name||m.username||"?").charAt(0).toUpperCase();
+    return `<div class="sp-item-friend"><div class="avatar avatar-sm">${av}</div><span class="status-dot status-${m.status||"offline"}"></span><span style="flex:1;font-size:12px;font-weight:500;">${S.escapeHtml(m.display_name||m.username)}</span>${m.game_status?`<span style="font-size:10px;color:var(--text-muted);margin-right:4px;">${S.escapeHtml(m.game_status)}</span>`:""}<button class="btn btn-icon btn-ghost btn-sm member-dots-btn" data-uid="${m.id}" data-uname="${S.escapeHtml(m.username||"")}" style="font-size:10px;"><i class="fa-solid fa-ellipsis-vertical"></i></button></div>`
+  }
+
   function showPage(){
     S.ui.activateNav("servers");const sp=document.getElementById("sub-panel");if(sp)sp.classList.remove("collapsed");
     S.ui.setSubPanelHeader("Серверы");
-    let h=`<div style="padding:12px;"><button class="btn btn-accent-outline" id="sp-create-server" style="width:100%;"><i class="fa-solid fa-plus"></i> Создать сервер</button></div>`;
-    if(S.serversList.length){h+='<div class="sp-section-title">Мои серверы</div>';S.serversList.forEach(s=>h+=`<div class="sp-item srv-item" data-sid="${s.id}"><i class="fa-solid fa-server" style="width:18px;"></i> <span>${S.escapeHtml(s.name)}</span></div>`)}
+    let h=`<div style="padding:8px 12px;display:flex;gap:6px;"><button class="btn btn-accent-outline" id="sp-create-server" style="flex:1;font-weight:700;"><i class="fa-solid fa-plus"></i> Создать</button><button class="btn btn-secondary" id="sp-discover-server" style="flex:1;font-weight:700;"><i class="fa-solid fa-compass"></i> Найти</button></div>`;
+    if(S.serversList.length){h+='<div class="sp-section-title">Мои серверы</div>';S.serversList.forEach(s=>{const av=s.icon_url?`<img src="${s.icon_url}">`:'S';h+=`<div class="sp-item srv-item" data-sid="${s.id}"><div class="avatar avatar-sm" style="margin-right:4px;background:var(--accent);color:#fff;font-weight:700;">${av}</div> <span>${S.escapeHtml(s.name)}</span><button class="btn btn-icon btn-ghost btn-sm srv-dots-btn" data-sid="${s.id}" style="margin-left:auto;font-size:10px;"><i class="fa-solid fa-ellipsis-vertical"></i></button></div>`})}
     else h+='<div style="padding:16px;text-align:center;color:var(--text-muted);font-size:12px;">Нет серверов</div>';
     S.ui.setSubPanelContent(h);
     document.getElementById("sp-create-server")?.addEventListener("click",showCreateModal);
-    document.querySelectorAll(".srv-item").forEach(el=>{
-      el.addEventListener("click",()=>selectServer(el.dataset.sid));
-      el.addEventListener("contextmenu",e=>{e.preventDefault();e.stopPropagation();showServerContextMenu(el.dataset.sid,e.clientX,e.clientY)})
-    });
-    S.ui.setMainContent(`<div class="main-content" style="display:flex;align-items:center;justify-content:center;"><div style="text-align:center;color:var(--text-muted);"><i class="fa-solid fa-server" style="font-size:48px;opacity:0.3;display:block;margin-bottom:16px;"></i><h3>Выберите сервер</h3><p style="font-size:13px;">Выберите сервер из списка или создайте новый</p></div></div>`);
-    S.ui.clearMembers()
+    document.getElementById("sp-discover-server")?.addEventListener("click",showDiscoverPage);
+    document.querySelectorAll(".srv-item").forEach(el=>el.addEventListener("click",()=>selectServer(el.dataset.sid)));
+    document.querySelectorAll(".srv-dots-btn").forEach(btn=>btn.addEventListener("click",e=>{e.stopPropagation();const srv=S.serversList.find(s=>s.id===btn.dataset.sid);if(!srv)return;const isOwner=srv.owner_id===S.user.id;const items=isOwner?[{label:'<i class="fa-solid fa-pen-to-square"></i> Редактировать',action:()=>showEditServerModal(btn.dataset.sid)},{label:'<i class="fa-solid fa-user-plus"></i> Пригласить',action:()=>showInviteModal(btn.dataset.sid)},"sep",{label:'<i class="fa-solid fa-trash"></i> Удалить',danger:true,action:()=>deleteServer(btn.dataset.sid)}]:[{label:'<i class="fa-solid fa-right-from-bracket"></i> Покинуть',danger:true,action:()=>leaveServer(btn.dataset.sid)}];S.ui.showContextMenu(items,e.clientX,e.clientY)}));
+    S.ui.setMainContent(`<div class="main-content" style="display:flex;align-items:center;justify-content:center;"><div style="text-align:center;color:var(--text-muted);"><i class="fa-solid fa-server" style="font-size:48px;opacity:0.3;display:block;margin-bottom:16px;"></i><h3>Серверы</h3><p style="font-size:13px;">Создайте новый сервер или найдите существующие</p></div></div>`);
+    S.ui.clearMembers();document.title="Sentcor - Серверы"
   }
 
-  // ---- CREATE SERVER ----
-  function showCreateModal(){
-    const b='<div class="input-group"><label class="input-label">Название сервера</label><input class="input" id="ns-name" placeholder="Мой сервер" maxlength="100"><div class="input-error" id="ns-err"></div></div>';
-    S.ui.showModal("Создать сервер",b,[
-      {text:"Отмена",cls:"btn-secondary"},
-      {text:"Создать",cls:"btn-primary",onClick:async(e,m,o)=>{
-        const n=document.getElementById("ns-name")?.value?.trim();
-        if(!n){const err=document.getElementById("ns-err");if(err)err.textContent="Введите название";return}
-        await createServer(n);o.remove()
-      }}
-    ])
-  }
+  function showCreateModal(){const b='<div class="input-group"><label class="input-label">Название сервера</label><input class="input" id="ns-name" placeholder="Мой сервер" maxlength="100"><div class="input-error" id="ns-err"></div></div>';S.ui.showModal("Создать сервер",b,[{text:"Отмена",cls:"btn-secondary"},{text:"Создать",cls:"btn-primary",onClick:async(e,m,o)=>{const n=document.getElementById("ns-name")?.value?.trim();if(!n){document.getElementById("ns-err").textContent="Введите название";return}await createServer(n);o.remove()}}])}
 
   async function createServer(name){
-    S.ui.toast("Создаём сервер...","info");
-    try{
-      // Insert server
-      const{data:srv,error:srvErr}=await sb.from("servers").insert({name,owner_id:S.user.id}).select().single();
-      if(srvErr){S.ui.toast("Ошибка: "+srvErr.message,"error");return}
-      // Add owner as member
-      await sb.from("server_members").insert({server_id:srv.id,user_id:S.user.id,role:"owner"});
-      // Default channels
-      await sb.from("channels").insert([
-        {server_id:srv.id,name:"общий",type:"text",position:0},
-        {server_id:srv.id,name:"Войс",type:"voice",position:1}
-      ]);
-      S.ui.toast("Сервер «"+name+"» создан!","success");
-      await loadSidebarServers();
-      // Small delay to ensure RLS cache is updated
-      setTimeout(()=>selectServer(srv.id),200)
-    }catch(e){S.ui.toast("Ошибка создания: "+e.message,"error")}
+    S.ui.toast("Создаём...","info");
+    try{const{data:srv,error:e}=await sb.from("servers").insert({name,owner_id:S.user.id}).select().single();if(e){S.ui.toast("Ошибка: "+e.message,"error");return}await sb.from("server_members").insert({server_id:srv.id,user_id:S.user.id,role:"owner"});await sb.from("channels").insert([{server_id:srv.id,name:"общий",type:"text",position:0},{server_id:srv.id,name:"Войс",type:"voice",position:1}]);S.ui.toast("Сервер «"+name+"» создан!","success");await loadSidebarServers();setTimeout(()=>selectServer(srv.id),300)}catch(err){S.ui.toast("Ошибка: "+err.message,"error")}
   }
 
-  // ---- EDIT SERVER ----
   function showEditServerModal(sid){
     const srv=S.serversList.find(s=>s.id===sid);if(!srv)return;
-    const b=`<div class="input-group"><label class="input-label">Название</label><input class="input" id="es-name" value="${S.escapeHtml(srv.name)}" maxlength="100"><div class="input-error" id="es-err"></div></div>`;
-    S.ui.showModal("Редактировать сервер",b,[
-      {text:"Отмена",cls:"btn-secondary"},
-      {text:"Сохранить",cls:"btn-primary",onClick:async()=>{
-        const n=document.getElementById("es-name")?.value?.trim();if(!n)return;
-        const{error}=await sb.from("servers").update({name:n}).eq("id",sid);
-        if(error)S.ui.toast("Ошибка: "+error.message,"error");else{S.ui.toast("Название изменено!","success");await loadSidebarServers();selectServer(sid)}
-        document.querySelector(".modal-overlay")?.remove()
-      }}
-    ])
+    const av=srv.icon_url?`<img src="${srv.icon_url}" style="width:64px;height:64px;border-radius:50%;object-fit:cover;">`:`<div style="width:64px;height:64px;border-radius:50%;background:var(--accent);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:26px;">${srv.name.charAt(0).toUpperCase()}</div>`;
+    const b=`<div style="text-align:center;margin-bottom:16px;">${av}<button class="btn btn-sm btn-secondary" id="es-avatar-btn" style="margin-top:8px;"><i class="fa-solid fa-camera"></i> Сменить иконку</button><input type="file" id="es-avatar-input" accept="image/*" hidden></div><div class="input-group"><label class="input-label">Название</label><input class="input" id="es-name" value="${S.escapeHtml(srv.name)}" maxlength="100"></div><div class="input-group"><label class="input-label">Описание</label><textarea class="input" id="es-desc" rows="2" maxlength="200">${S.escapeHtml(srv.description||"")}</textarea></div>`;
+    S.ui.showModal("Редактировать сервер",b,[{text:"Отмена",cls:"btn-secondary"},{text:"Сохранить",cls:"btn-primary",onClick:async()=>{const n=document.getElementById("es-name")?.value?.trim(),d=document.getElementById("es-desc")?.value?.trim();if(!n)return;const{error}=await sb.from("servers").update({name:n,description:d||null}).eq("id",sid);if(error)S.ui.toast("Ошибка: "+error.message,"error");else{S.ui.toast("Сервер обновлён!","success");await loadSidebarServers();selectServer(sid)}document.querySelector(".modal-overlay")?.remove()}}]);
+    document.getElementById("es-avatar-btn")?.addEventListener("click",()=>document.getElementById("es-avatar-input").click());
+    document.getElementById("es-avatar-input")?.addEventListener("change",async e=>{const f=e.target.files[0];if(!f||f.size>3*1024*1024){S.ui.toast("Файл >3MB","error");return}const ext=f.name.split(".").pop(),fp=`server-icons/${sid}_${Date.now()}.${ext}`;const{error:ue}=await sb.storage.from("avatars").upload(fp,f,{upsert:true});if(ue){S.ui.toast("Ошибка загрузки","error");return}const{data:ud}=sb.storage.from("avatars").getPublicUrl(fp);await sb.from("servers").update({icon_url:ud.publicUrl}).eq("id",sid);S.ui.toast("Иконка обновлена!","success");document.querySelector(".modal-overlay")?.remove();const srv=S.serversList.find(s=>s.id===sid);if(srv)srv.icon_url=ud.publicUrl;await loadSidebarServers();selectServer(sid)})
   }
 
-  // ---- INVITE USER TO SERVER ----
-  function showInviteModal(sid){
-    const b='<div class="input-group"><label class="input-label">Имя пользователя</label><input class="input" id="inv-user" placeholder="username..."><div class="input-error" id="inv-err"></div></div>';
-    S.ui.showModal("Пригласить на сервер",b,[
-      {text:"Отмена",cls:"btn-secondary"},
-      {text:"Пригласить",cls:"btn-primary",onClick:async()=>{
-        const q=document.getElementById("inv-user")?.value?.trim();if(!q)return;
-        const{data:pr}=await sb.from("profiles").select("id,username").or(`username.eq.${q}`).limit(1);
-        if(!pr||!pr.length){const err=document.getElementById("inv-err");if(err)err.textContent="Пользователь не найден";return}
-        const target=pr[0];
-        const{error}=await sb.from("server_members").insert({server_id:sid,user_id:target.id,role:"member"});
-        if(error){const err=document.getElementById("inv-err");if(err)err.textContent=error.message}
-        else{S.ui.toast(target.username+" приглашён!","success");await loadSidebarServers();await loadMembers(sid);document.querySelector(".modal-overlay")?.remove()}
-      }}
-    ])
+  function showInviteModal(sid){const b='<div class="input-group"><label class="input-label">Имя пользователя</label><input class="input" id="inv-user" placeholder="username..."><div class="input-error" id="inv-err"></div></div>';S.ui.showModal("Пригласить на сервер",b,[{text:"Отмена",cls:"btn-secondary"},{text:"Пригласить",cls:"btn-primary",onClick:async()=>{const q=document.getElementById("inv-user")?.value?.trim();if(!q)return;const{data:pr}=await sb.from("profiles").select("id,username").or(`username.eq.${q}`).limit(1);if(!pr||!pr.length){document.getElementById("inv-err").textContent="Пользователь не найден";return}const t=pr[0];const{error}=await sb.from("server_members").insert({server_id:sid,user_id:t.id,role:"member"});if(error)document.getElementById("inv-err").textContent=error.message;else{S.ui.toast(t.username+" приглашён!","success");loadSidebarServers();loadMembers(sid);document.querySelector(".modal-overlay")?.remove()}}}])}
+  function showCreateChannelModal(sid){const b='<div class="input-group"><label class="input-label">Название</label><input class="input" id="nc-name" placeholder="новый-канал" maxlength="100"><div class="input-error" id="nc-err"></div></div><div class="input-group"><label class="input-label">Тип</label><select class="input" id="nc-type"><option value="text">Текстовый</option><option value="voice">Голосовой</option></select></div>';S.ui.showModal("Создать канал",b,[{text:"Отмена",cls:"btn-secondary"},{text:"Создать",cls:"btn-primary",onClick:async()=>{const n=document.getElementById("nc-name")?.value?.trim();if(!n){document.getElementById("nc-err").textContent="Введите название";return}const t=document.getElementById("nc-type")?.value||"text";const{error}=await sb.from("channels").insert({server_id:sid,name:n,type:t,position:S.channelsList.length});if(error)S.ui.toast("Ошибка: "+error.message,"error");else{S.ui.toast("Канал создан!","success");renderChannels(sid)}document.querySelector(".modal-overlay")?.remove()}}])}
+
+  async function showChannelManagerModal(sid){const{data:ch}=await sb.from("channels").select("*").eq("server_id",sid).order("position");if(!ch||!ch.length){S.ui.toast("Нет каналов","info");return}let h='<div style="display:flex;flex-direction:column;gap:4px;">';ch.forEach(c=>h+=`<div style="display:flex;align-items:center;gap:8px;padding:4px 0;"><span style="flex:1;">${c.type==="voice"?'🔊':'#'} ${S.escapeHtml(c.name)}</span><button class="btn btn-sm btn-ghost rch-btn" data-chid="${c.id}" data-chname="${S.escapeHtml(c.name)}"><i class="fa-solid fa-pen"></i></button><button class="btn btn-sm btn-danger dch-btn" data-chid="${c.id}"><i class="fa-solid fa-trash"></i></button></div>`);h+='</div>';S.ui.showModal("Управление каналами",h,[{text:"Закрыть",cls:"btn-secondary"}]);document.querySelectorAll(".rch-btn").forEach(b=>b.addEventListener("click",()=>{const nn=prompt("Новое название:",b.dataset.chname);if(nn&&nn.trim()){sb.from("channels").update({name:nn.trim()}).eq("id",b.dataset.chid).then(()=>{S.ui.toast("Переименовано!","success");renderChannels(sid);document.querySelector(".modal-overlay")?.remove()})}}));document.querySelectorAll(".dch-btn").forEach(b=>b.addEventListener("click",()=>{S.ui.confirm("Удалить канал?","Сообщения пропадут.",async()=>{await sb.from("channels").delete().eq("id",b.dataset.chid);S.ui.toast("Канал удалён","info");renderChannels(sid);document.querySelector(".modal-overlay")?.remove()})}))}
+  async function showRolesModal(sid){const{data:mm}=await sb.from("server_members").select("user_id,role").eq("server_id",sid);if(!mm||!mm.length){S.ui.toast("Нет участников","info");return}const ids=mm.map(m=>m.user_id);const{data:pr}=await sb.from("profiles").select("id,username,display_name").in("id",ids);const pm={};(pr||[]).forEach(p=>pm[p.id]=p);let h='<div style="display:flex;flex-direction:column;gap:6px;">';mm.forEach(m=>{if(m.user_id===S.user.id)return;h+=`<div style="display:flex;align-items:center;gap:8px;padding:4px 0;"><span style="flex:1;">${S.escapeHtml(pm[m.user_id]?.display_name||pm[m.user_id]?.username||"?")}</span><select class="input role-sel" data-uid="${m.user_id}" style="width:110px;padding:4px 8px;font-size:11px;"><option value="member" ${m.role==="member"?"selected":""}>Участник</option><option value="mod" ${m.role==="mod"?"selected":""}>Модер</option><option value="admin" ${m.role==="admin"?"selected":""}>Админ</option></select></div>`});h+='</div>';S.ui.showModal("Роли участников",h,[{text:"Закрыть",cls:"btn-secondary"},{text:"Сохранить",cls:"btn-primary",onClick:async()=>{for(const s of document.querySelectorAll(".role-sel")){await sb.from("server_members").update({role:s.value}).eq("server_id",sid).eq("user_id",s.dataset.uid)}S.ui.toast("Роли обновлены!","success");document.querySelector(".modal-overlay")?.remove()}}])}
+
+  async function leaveServer(sid){S.ui.confirm("Покинуть сервер?","Потеряете доступ.",async()=>{await sb.from("server_members").delete().eq("server_id",sid).eq("user_id",S.user.id);S.ui.toast("Вы покинули сервер","info");S.activeServer=null;S.activeChannel=null;await loadSidebarServers();showPage()})}
+  async function deleteServer(sid){S.ui.confirm("Удалить сервер?","Всё пропадёт.",async()=>{const{error}=await sb.from("servers").delete().eq("id",sid);if(error)S.ui.toast("Ошибка: "+error.message,"error");else{S.ui.toast("Сервер удалён","info");S.activeServer=null;S.activeChannel=null;await loadSidebarServers();showPage()}})}
+
+  // ---- DISCOVER ----
+  async function showDiscoverPage(){
+    S.ui.setSubPanelHeader("Поиск серверов");
+    S.ui.setSubPanelContent(`<div class="sp-item active" id="back-to-servers-btn"><i class="fa-solid fa-arrow-left" style="width:18px;"></i> Назад к моим</div>`);
+    document.getElementById("back-to-servers-btn")?.addEventListener("click",()=>showPage());
+    const{data:all}=await sb.from("servers").select("*").order("created_at",{ascending:false}).limit(30);
+    const allServers=(all||[]).filter(s=>!S.serversList.some(ms=>ms.id===s.id));
+    const renderList=(list)=>{let r="";list.forEach(s=>{const av=s.icon_url?`<img src="${s.icon_url}" style="width:44px;height:44px;border-radius:50%;object-fit:cover;">`:`<div style="width:44px;height:44px;border-radius:50%;background:var(--accent);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:18px;">${s.name.charAt(0).toUpperCase()}</div>`;r+=`<div class="home-friend-card"><div>${av}</div><div style="flex:1;"><div style="font-weight:600;">${S.escapeHtml(s.name)}</div><div style="font-size:11px;color:var(--text-muted);">${s.description||"Нет описания"}</div></div><button class="btn btn-sm btn-primary join-srv-btn" data-sid="${s.id}"><i class="fa-solid fa-right-to-bracket"></i></button></div>`});return r||'<div style="text-align:center;color:var(--text-muted);padding:20px;">Нет доступных серверов</div>'};
+    let h=`<div class="main-content"><div style="padding:16px 0;"><input class="input" id="discover-search" placeholder="Поиск серверов..."></div><div id="discover-results" style="display:flex;flex-direction:column;gap:8px;">${renderList(allServers)}</div></div>`;
+    S.ui.setMainContent(h);S.ui.clearMembers();document.title="Sentcor - Поиск серверов";
+    document.getElementById("discover-search")?.addEventListener("input",async e=>{const q=e.target.value.trim();if(!q){document.getElementById("discover-results").innerHTML=renderList(allServers);return}const{data:found}=await sb.from("servers").select("*").ilike("name",`%${q}%`).limit(20);document.getElementById("discover-results").innerHTML=renderList((found||[]).filter(s=>!S.serversList.some(ms=>ms.id===s.id)))});
+    document.querySelectorAll(".join-srv-btn").forEach(b=>b.addEventListener("click",async e=>{e.stopPropagation();const sid=b.dataset.sid;const{error}=await sb.from("server_members").insert({server_id:sid,user_id:S.user.id,role:"member"});if(error)S.ui.toast("Ошибка: "+error.message,"error");else{S.ui.toast("Вы присоединились!","success");await loadSidebarServers();selectServer(sid)}}))
   }
 
-  // ---- CHANNEL MANAGER ----
-  async function showChannelManagerModal(sid){
-    const{data:ch}=await sb.from("channels").select("*").eq("server_id",sid).order("position");
-    const channels=ch||[];
-    let h='<div style="display:flex;flex-direction:column;gap:4px;">';
-    channels.forEach(c=>h+=`<div style="display:flex;align-items:center;gap:8px;padding:4px 0;"><span style="flex:1;">${c.type==="voice"?'🔊':'#'} ${S.escapeHtml(c.name)}</span><button class="btn btn-sm btn-ghost rename-ch-btn" data-chid="${c.id}"><i class="fa-solid fa-pen"></i></button><button class="btn btn-sm btn-danger del-ch-btn" data-chid="${c.id}"><i class="fa-solid fa-trash"></i></button></div>`);
-    h+='<button class="btn btn-sm btn-primary" id="mgr-add-ch-btn" style="margin-top:8px;"><i class="fa-solid fa-plus"></i> Добавить канал</button></div>';
-    S.ui.showModal("Управление каналами",h,[{text:"Закрыть",cls:"btn-secondary"}]);
-    document.getElementById("mgr-add-ch-btn")?.addEventListener("click",()=>{document.querySelector(".modal-overlay")?.remove();showCreateChannelModal(sid)});
-    document.querySelectorAll(".rename-ch-btn").forEach(b=>b.addEventListener("click",()=>{
-      const chid=b.dataset.chid;const ch=channels.find(c=>c.id===chid);if(!ch)return;
-      const newName=prompt("Новое название:",ch.name);if(!newName||!newName.trim())return;
-      sb.from("channels").update({name:newName.trim()}).eq("id",chid).then(()=>{S.ui.toast("Переименовано!","success");renderChannels(sid)})
-    }));
-    document.querySelectorAll(".del-ch-btn").forEach(b=>b.addEventListener("click",()=>{
-      const chid=b.dataset.chid;S.ui.confirm("Удалить канал?","Все сообщения будут потеряны.",async()=>{await sb.from("channels").delete().eq("id",chid);S.ui.toast("Канал удалён","info");await renderChannels(sid);document.querySelector(".modal-overlay")?.remove()})
-    }))
-  }
-
-  // ---- ROLES MANAGER ----
-  async function showRolesModal(sid){
-    const{data:mm}=await sb.from("server_members").select("user_id,role").eq("server_id",sid);
-    if(!mm||!mm.length){S.ui.toast("Нет участников","info");return}
-    const ids=mm.map(m=>m.user_id);
-    const{data:pr}=await sb.from("profiles").select("id,username,display_name").in("id",ids);
-    const pm={};(pr||[]).forEach(p=>pm[p.id]=p);
-    let h='<div style="display:flex;flex-direction:column;gap:6px;">';
-    mm.forEach(m=>{
-      const name=pm[m.user_id]?.display_name||pm[m.user_id]?.username||"?";if(m.user_id===S.user.id)return;
-      h+=`<div style="display:flex;align-items:center;gap:8px;padding:4px 0;"><span style="flex:1;">${S.escapeHtml(name)}</span><span style="font-size:11px;color:var(--text-muted);">${m.role}</span>
-        <select class="input role-select" data-uid="${m.user_id}" style="width:auto;padding:4px 8px;font-size:11px;"><option value="member" ${m.role==="member"?"selected":""}>Участник</option><option value="mod" ${m.role==="mod"?"selected":""}>Модер</option><option value="admin" ${m.role==="admin"?"selected":""}>Админ</option></select></div>`
-    });
-    h+='</div>';
-    S.ui.showModal("Роли участников",h,[
-      {text:"Закрыть",cls:"btn-secondary"},
-      {text:"Сохранить",cls:"btn-primary",onClick:async()=>{
-        const selects=document.querySelectorAll(".role-select");
-        for(const sel of selects){await sb.from("server_members").update({role:sel.value}).eq("server_id",sid).eq("user_id",sel.dataset.uid)}
-        S.ui.toast("Роли обновлены!","success");document.querySelector(".modal-overlay")?.remove()
-      }}
-    ])
-  }
-
-  // ---- LEAVE / DELETE SERVER ----
-  async function leaveServer(sid){
-    S.ui.confirm("Покинуть сервер?","Вы потеряете доступ ко всем каналам.",async()=>{
-      await sb.from("server_members").delete().eq("server_id",sid).eq("user_id",S.user.id);
-      S.ui.toast("Вы покинули сервер","info");S.activeServer=null;S.activeChannel=null;
-      await loadSidebarServers();showPage()
-    })
-  }
-  async function deleteServer(sid){
-    S.ui.confirm("Удалить сервер?","Все каналы и сообщения будут безвозвратно удалены.",async()=>{
-      const{error}=await sb.from("servers").delete().eq("id",sid);
-      if(error)S.ui.toast("Ошибка: "+error.message,"error");else{S.ui.toast("Сервер удалён","info");S.activeServer=null;S.activeChannel=null;await loadSidebarServers();showPage()}
-    })
-  }
-
-  // ---- CREATE CHANNEL ----
-  function showCreateChannelModal(sid){
-    const b='<div class="input-group"><label class="input-label">Название</label><input class="input" id="nc-name" placeholder="новый-канал" maxlength="100"><div class="input-error" id="nc-err"></div></div><div class="input-group"><label class="input-label">Тип</label><select class="input" id="nc-type"><option value="text">Текстовый</option><option value="voice">Голосовой</option></select></div>';
-    S.ui.showModal("Создать канал",b,[
-      {text:"Отмена",cls:"btn-secondary"},
-      {text:"Создать",cls:"btn-primary",onClick:async()=>{
-        const n=document.getElementById("nc-name")?.value?.trim();if(!n){const err=document.getElementById("nc-err");if(err)err.textContent="Введите название";return}
-        const t=document.getElementById("nc-type")?.value||"text";
-        const{error}=await sb.from("channels").insert({server_id:sid,name:n,type:t,position:S.channelsList.length});
-        if(error)S.ui.toast("Ошибка: "+error.message,"error");else{S.ui.toast("Канал создан!","success");await renderChannels(sid)}
-        document.querySelector(".modal-overlay")?.remove()
-      }}
-    ])
-  }
-
-  S.servers={loadSidebarServers,selectServer,showPage,showCreateModal,createServer,showCreateChannelModal,loadMembers};
+  S.servers={loadSidebarServers,selectServer,showPage,showCreateModal,createServer,showCreateChannelModal,loadMembers,showDiscoverPage};
 })();

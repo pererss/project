@@ -143,5 +143,5 @@
     document.querySelectorAll(".modal .btn-ghost[data-st]").forEach(b=>b.addEventListener("click",async()=>{await S.auth.setOnlineStatus(b.dataset.st);S.ui.updateFooter();document.querySelector(".modal-overlay").remove()}))
   }
 
-  S.profile={showPage,showSettings,showStatusSelector};
+  S.profileMod={showPage,showSettings,showStatusSelector};
 })();

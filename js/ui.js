@@ -110,12 +110,12 @@
     const hb=document.getElementById("home-btn");if(hb)hb.addEventListener("click",()=>{deactivateNav();if(S.friends.loadAll)S.friends.loadAll().then(()=>showHomePage());else showHomePage()});
     const nf=document.getElementById("nav-friends");if(nf)nf.addEventListener("click",()=>{activateNav("friends");if(S.friends&&S.friends.showPage)S.friends.showPage()});
     const ns=document.getElementById("nav-servers");if(ns)ns.addEventListener("click",()=>{activateNav("servers");if(S.servers&&S.servers.showPage)S.servers.showPage()});
-    const np=document.getElementById("nav-profile");if(np)np.addEventListener("click",()=>{activateNav("profile");if(S.profile&&S.profile.showPage)S.profile.showPage()});
-    const nst=document.getElementById("nav-settings");if(nst)nst.addEventListener("click",()=>{activateNav("settings");if(S.profile&&S.profile.showSettings)S.profile.showSettings()});
+    const np=document.getElementById("nav-profile");if(np)np.addEventListener("click",()=>{activateNav("profile");if(S.profileMod)S.profileMod.showPage()});
+    const nst=document.getElementById("nav-settings");if(nst)nst.addEventListener("click",()=>{activateNav("settings");if(S.profileMod)S.profileMod.showSettings()});
     const ab=document.getElementById("add-server-btn");if(ab)ab.addEventListener("click",()=>{if(S.servers&&S.servers.showCreateModal)S.servers.showCreateModal()});
     const st=document.getElementById("sp-toggle");if(st)st.addEventListener("click",()=>{const sp=document.getElementById("sub-panel");if(sp)sp.classList.toggle("collapsed")});
     const lb=document.getElementById("logout-btn");if(lb)lb.addEventListener("click",()=>confirm("Выход","Вы уверены?",async()=>{await S.auth.signOut()}));
-    const fa=document.getElementById("footer-avatar");if(fa)fa.addEventListener("click",()=>{if(S.profile&&S.profile.showStatusSelector)S.profile.showStatusSelector()})
+    const fa=document.getElementById("footer-avatar");if(fa)fa.addEventListener("click",()=>{if(S.profileMod)S.profileMod.showStatusSelector()})
   }
   function activateNav(nav){
     $$("#sidebar .sidebar-nav").forEach(e=>e.classList.remove("active"));$$("#sidebar .server-icon-nav").forEach(e=>e.classList.remove("active"));

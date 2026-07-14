@@ -32,6 +32,7 @@ CREATE TABLE servers (
   owner_id    UUID NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
   icon_url    TEXT,
   description TEXT,
+  public      BOOLEAN DEFAULT true,
   created_at  TIMESTAMPTZ DEFAULT now()
 );
 ALTER TABLE servers ENABLE ROW LEVEL SECURITY;
@@ -127,7 +128,7 @@ CREATE TABLE friends (
 );
 ALTER TABLE friends ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "friends_select" ON friends FOR SELECT USING (auth.uid() = user_id OR auth.uid() = friend_id);
-CREATE POLICY "friends_insert" ON friends FOR INSERT WITH CHECK (auth.uid() = user_id);
+CREATE POLICY "friends_insert" ON friends FOR INSERT WITH CHECK (auth.uid() = user_id OR auth.uid() = friend_id);
 CREATE POLICY "friends_update" ON friends FOR UPDATE USING (auth.uid() = user_id);
 CREATE POLICY "friends_delete" ON friends FOR DELETE USING (auth.uid() = user_id OR auth.uid() = friend_id);
 
