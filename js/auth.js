@@ -1,7 +1,8 @@
-// SENTCOR v3 — Auth (no auto-idle, theme support, username cooldown)
+// SENTCOR v4 — Auth
 (function(){
-  const S=window.SENTCOR,sb=S.sb;
+  const C=window.SENTCOR_CONFIG,S=window.SENTCOR,sb=S.sb;
   S.user=null;S.profile=null;S.session=null;
+
   async function initSession(){
     const{data}=await sb.auth.getSession();
     if(data.session){S.session=data.session;S.user=data.session.user;await fetchProfile();return true}
@@ -29,7 +30,7 @@
     if(ue)return{error:ue};
     const{data:ud}=sb.storage.from("avatars").getPublicUrl(fp);
     const{error:pe}=await sb.from("profiles").update({avatar_url:ud.publicUrl}).eq("id",S.user.id);
-    if(!pe){S.profile.avatar_url=ud.publicUrl;S.ui.updateFooter()}
+    if(!pe){S.profile.avatar_url=ud.publicUrl;if(S.ui)try{S.ui.updateFooter()}catch(e){}}
     return{url:ud.publicUrl,error:pe}
   }
   async function signUp(email,password,username){
@@ -51,23 +52,29 @@
   }
   async function setOnlineStatus(status){
     if(!S.user)return;
-    if(status==="idle")return; // Never auto-idle
+    if(status==="idle")return;
     await sb.from("profiles").update({status,last_login:new Date().toISOString()}).eq("id",S.user.id);
     if(S.profile)S.profile.status=status
   }
   function canChangeUsername(){
     if(!S.profile||!S.profile.last_username_change)return true;
     const days=(Date.now()-new Date(S.profile.last_username_change).getTime())/(86400000);
-    return days>=S.SENTCOR_CONFIG.USERNAME_CHANGE_COOLDOWN_DAYS
+    return days>=C.USERNAME_CHANGE_COOLDOWN_DAYS
   }
   function daysUntilUsernameChange(){
     if(!S.profile||!S.profile.last_username_change)return 0;
     const days=(Date.now()-new Date(S.profile.last_username_change).getTime())/(86400000);
-    return Math.max(0,Math.ceil(S.SENTCOR_CONFIG.USERNAME_CHANGE_COOLDOWN_DAYS-days))
+    return Math.max(0,Math.ceil(C.USERNAME_CHANGE_COOLDOWN_DAYS-days))
+  }
+  async function changePassword(newPassword){
+    if(!S.user)return{error:"Not logged in"};
+    const{error}=await sb.auth.updateUser({password:newPassword});
+    if(!error)S.ui.toast("Пароль изменён!","success");
+    return{error}
   }
   sb.auth.onAuthStateChange(async(event,session)=>{
-    if(event==="SIGNED_IN"&&session){S.user=session.user;S.session=session;await fetchProfile();await recordLogin();await setOnlineStatus("online");if(S.ui.showApp)S.ui.showApp()}
-    else if(event==="SIGNED_OUT"){S.user=null;S.profile=null;S.session=null;if(S.ui.showAuth)S.ui.showAuth()}
+    if(event==="SIGNED_IN"&&session){S.user=session.user;S.session=session;await fetchProfile();await recordLogin();await setOnlineStatus("online");if(S.ui&&S.ui.showApp)S.ui.showApp()}
+    else if(event==="SIGNED_OUT"){S.user=null;S.profile=null;S.session=null;if(S.ui&&S.ui.showAuth)S.ui.showAuth()}
   });
-  S.auth={initSession,fetchProfile,updateProfile,uploadAvatar,signUp,signIn,signOut,setOnlineStatus,recordLogin,canChangeUsername,daysUntilUsernameChange}
+  S.auth={initSession,fetchProfile,updateProfile,uploadAvatar,signUp,signIn,signOut,setOnlineStatus,recordLogin,canChangeUsername,daysUntilUsernameChange,changePassword}
 })();
