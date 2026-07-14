@@ -36,7 +36,7 @@ CREATE TABLE servers (
 );
 ALTER TABLE servers ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "servers_select" ON servers FOR SELECT
-  USING (EXISTS (SELECT 1 FROM server_members sm WHERE sm.server_id = servers.id AND sm.user_id = auth.uid()));
+  USING (owner_id = auth.uid() OR EXISTS (SELECT 1 FROM server_members sm WHERE sm.server_id = servers.id AND sm.user_id = auth.uid()));
 CREATE POLICY "servers_insert" ON servers FOR INSERT WITH CHECK (auth.uid() = owner_id);
 CREATE POLICY "servers_update" ON servers FOR UPDATE USING (owner_id = auth.uid());
 CREATE POLICY "servers_delete" ON servers FOR DELETE USING (owner_id = auth.uid());
