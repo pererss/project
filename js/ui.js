@@ -91,7 +91,15 @@
       <div class="home-section-title">ДРУЗЬЯ В СЕТИ — ${online.length}</div>`;
     if(online.length){online.forEach(f=>{const av=f.avatar_url?`<img src="${f.avatar_url}">`:(f.display_name||f.username||"?").charAt(0).toUpperCase();h+=`<div class="home-friend-card" data-fid="${f.id}"><div class="friend-avatar"><div class="avatar">${av}</div><span class="status-dot status-${f.status}"></span></div><div class="friend-info"><div class="friend-name">${esc(f.display_name||f.username)}</div><div class="friend-meta">${f.game_status?esc(f.game_status):"В сети"}</div></div></div>`})}
     else{h+=`<div class="home-empty"><i class="fa-solid fa-users"></i><h3>Никого нет в сети</h3><p>Когда ваши друзья зайдут, они появятся здесь.</p></div>`}
-    h+=`</div>`;setMain(h);clearMembers();
+    h+=`</div>`;setMain(h);
+    // Right panel: user stats
+    const sp=S.profile||{};const fr=S.friendsList||[];
+    setMembers(`<div class="sp-section-title">Статистика</div><div style="padding:12px;display:flex;flex-direction:column;gap:8px;">
+      <div style="display:flex;justify-content:space-between;"><span style="font-size:12px;">💎 SentCoins</span><span style="font-weight:700;color:var(--yellow);">${(sp.sent_coins||0).toLocaleString()}</span></div>
+      <div style="display:flex;justify-content:space-between;"><span style="font-size:12px;">🔥 Стрик</span><span style="font-weight:700;">${sp.streak_days||0} дн.</span></div>
+      <div style="display:flex;justify-content:space-between;"><span style="font-size:12px;">👥 Друзей</span><span style="font-weight:700;">${fr.length}</span></div>
+      <div style="display:flex;justify-content:space-between;"><span style="font-size:12px;">🖥️ Серверов</span><span style="font-weight:700;">${S.serversList?S.serversList.length:0}</span></div>
+    </div>`);
     document.querySelectorAll(".home-friend-card").forEach(c=>c.addEventListener("click",()=>{if(S.friends)S.friends.openChat(c.dataset.fid)}))
   }
 

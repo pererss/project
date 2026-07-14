@@ -22,8 +22,12 @@
   }
 
   function applyTheme(t){
-    document.body.classList.remove("theme-oled","theme-midnight");
-    if(t&&t!=="caramel")document.body.classList.add("theme-"+t)
+    document.body.classList.remove("theme-oled","theme-midnight","theme-forest","theme-rose","theme-custom");
+    if(t&&t!=="caramel")document.body.classList.add("theme-"+t);
+    // Custom theme stored in profile.custom_theme (JSON: {bg, accent, text})
+    if(t==="custom"&&S.profile&&S.profile.custom_theme){
+      try{const ct=JSON.parse(S.profile.custom_theme);Object.entries(ct).forEach(([k,v])=>document.body.style.setProperty('--'+k,v))}catch(e){}
+    }
   }
 
   async function updateProfile(upd){
