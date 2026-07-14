@@ -171,6 +171,21 @@ CREATE POLICY "vp_select" ON voice_participants FOR SELECT USING (true);
 CREATE POLICY "vp_insert" ON voice_participants FOR INSERT WITH CHECK (auth.uid() = user_id);
 CREATE POLICY "vp_delete" ON voice_participants FOR DELETE USING (auth.uid() = user_id);
 
+-- 12. ЗВОНКИ
+CREATE TABLE calls (
+  id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  caller_id   UUID NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+  callee_id   UUID NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+  room_name   TEXT NOT NULL,
+  status      TEXT DEFAULT 'ringing' CHECK (status IN ('ringing','accepted','declined','ended')),
+  caller_name TEXT,
+  created_at  TIMESTAMPTZ DEFAULT now()
+);
+ALTER TABLE calls ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "calls_select" ON calls FOR SELECT USING (auth.uid() = caller_id OR auth.uid() = callee_id);
+CREATE POLICY "calls_insert" ON calls FOR INSERT WITH CHECK (auth.uid() = caller_id);
+CREATE POLICY "calls_update" ON calls FOR UPDATE USING (auth.uid() = caller_id OR auth.uid() = callee_id);
+
 -- 11. ЕЖЕДНЕВНЫЕ ЛОГИНЫ
 CREATE TABLE daily_logins (
   user_id   UUID NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
