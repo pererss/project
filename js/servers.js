@@ -46,6 +46,8 @@
 
     document.getElementById("add-ch-btn")?.addEventListener("click",()=>showCreateChannelModal(sid));
     await loadMembers(sid);
+    // Auto-open first text channel
+    if(txt.length>0){const fc=txt[0];S.activeChannel=fc;S.ui.resetCompact();S.ui.renderChatView(fc);S.chat.loadMessages(fc.id)}
   }
 
   async function loadMembers(sid){
