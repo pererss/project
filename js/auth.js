@@ -85,9 +85,10 @@
 
   async function setOnlineStatus(status){
     if(!S.user)return;
-    if(status==="idle")return;
+    // Allow all statuses including idle (user-triggered)
     await sb.from("profiles").update({status,last_login:new Date().toISOString()}).eq("id",S.user.id);
-    if(S.profile)S.profile.status=status
+    if(S.profile)S.profile.status=status;
+    S.ui.updateFooter()
   }
 
   function canChangeUsername(){

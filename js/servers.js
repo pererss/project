@@ -76,11 +76,16 @@
     S.ui.clearMembers();document.title="Sentcor - Серверы"
   }
 
-  function showCreateModal(){const b='<div class="input-group"><label class="input-label">Название сервера</label><input class="input" id="ns-name" placeholder="Мой сервер" maxlength="100"><div class="input-error" id="ns-err"></div></div>';S.ui.showModal("Создать сервер",b,[{text:"Отмена",cls:"btn-secondary"},{text:"Создать",cls:"btn-primary",onClick:async(e,m,o)=>{const n=document.getElementById("ns-name")?.value?.trim();if(!n){document.getElementById("ns-err").textContent="Введите название";return}await createServer(n);o.remove()}}])}
+  function showCreateModal(){
+    const b=`<div class="input-group"><label class="input-label">Название сервера</label><input class="input" id="ns-name" placeholder="Мой сервер" maxlength="100"><div class="input-error" id="ns-err"></div></div>
+    <div class="input-group"><label class="input-label">Тип сервера</label><select class="input" id="ns-public"><option value="true">🌍 Публичный (виден в поиске)</option><option value="false">🔒 Приватный (только по приглашению)</option></select></div>
+    <div class="input-group"><label class="input-label">Описание</label><textarea class="input" id="ns-desc" rows="2" maxlength="200" placeholder="О чём сервер..."></textarea></div>`;
+    S.ui.showModal("Создать сервер",b,[{text:"Отмена",cls:"btn-secondary"},{text:"Создать",cls:"btn-primary",onClick:async(e,m,o)=>{const n=document.getElementById("ns-name")?.value?.trim();if(!n){document.getElementById("ns-err").textContent="Введите название";return}const pub=document.getElementById("ns-public")?.value==="true";const d=document.getElementById("ns-desc")?.value?.trim()||"";await createServer(n,pub,d);o.remove()}}])
+  }
 
-  async function createServer(name){
+  async function createServer(name,isPublic,desc){
     S.ui.toast("Создаём...","info");
-    try{const{data:srv,error:e}=await sb.from("servers").insert({name,owner_id:S.user.id}).select().single();if(e){S.ui.toast("Ошибка: "+e.message,"error");return}await sb.from("server_members").insert({server_id:srv.id,user_id:S.user.id,role:"owner"});await sb.from("channels").insert([{server_id:srv.id,name:"общий",type:"text",position:0},{server_id:srv.id,name:"Войс",type:"voice",position:1}]);S.ui.toast("Сервер «"+name+"» создан!","success");await loadSidebarServers();setTimeout(()=>selectServer(srv.id),300)}catch(err){S.ui.toast("Ошибка: "+err.message,"error")}
+    try{const{data:srv,error:e}=await sb.from("servers").insert({name,owner_id:S.user.id,public:isPublic,description:desc||null}).select().single();if(e){S.ui.toast("Ошибка: "+e.message,"error");return}await sb.from("server_members").insert({server_id:srv.id,user_id:S.user.id,role:"owner"});await sb.from("channels").insert([{server_id:srv.id,name:"общий",type:"text",position:0},{server_id:srv.id,name:"Войс",type:"voice",position:1}]);S.ui.toast("Сервер «"+name+"» создан!","success");await loadSidebarServers();setTimeout(()=>selectServer(srv.id),300)}catch(err){S.ui.toast("Ошибка: "+err.message,"error")}
   }
 
   function showEditServerModal(sid){
@@ -107,7 +112,7 @@
     S.ui.setSubPanelContent(`<div class="sp-item active" id="back-to-servers-btn"><i class="fa-solid fa-arrow-left" style="width:18px;"></i> Назад к моим</div>`);
     document.getElementById("back-to-servers-btn")?.addEventListener("click",()=>showPage());
     const{data:all}=await sb.from("servers").select("*").order("created_at",{ascending:false}).limit(30);
-    const allServers=(all||[]).filter(s=>!S.serversList.some(ms=>ms.id===s.id));
+    const allServers=(all||[]).filter(s=>s.public!==false&&!S.serversList.some(ms=>ms.id===s.id));
     const renderList=(list)=>{let r="";list.forEach(s=>{const av=s.icon_url?`<img src="${s.icon_url}" style="width:44px;height:44px;border-radius:50%;object-fit:cover;">`:`<div style="width:44px;height:44px;border-radius:50%;background:var(--accent);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:18px;">${s.name.charAt(0).toUpperCase()}</div>`;r+=`<div class="home-friend-card"><div>${av}</div><div style="flex:1;"><div style="font-weight:600;">${S.escapeHtml(s.name)}</div><div style="font-size:11px;color:var(--text-muted);">${s.description||"Нет описания"}</div></div><button class="btn btn-sm btn-primary join-srv-btn" data-sid="${s.id}"><i class="fa-solid fa-right-to-bracket"></i></button></div>`});return r||'<div style="text-align:center;color:var(--text-muted);padding:20px;">Нет доступных серверов</div>'};
     let h=`<div class="main-content"><div style="padding:16px 0;"><input class="input" id="discover-search" placeholder="Поиск серверов..."></div><div id="discover-results" style="display:flex;flex-direction:column;gap:8px;">${renderList(allServers)}</div></div>`;
     S.ui.setMainContent(h);S.ui.clearMembers();document.title="Sentcor - Поиск серверов";
