@@ -1,38 +1,40 @@
-// SENTCOR v5.3 — Friends (clean, chat-first on click)
+// SENTCOR v5.6 — Chats: only friends with messages. Friends: click → chat.
 (function(){
   const S=window.SENTCOR,sb=S.sb;
-  S.friendsList=[];S.pending=[];S.outgoing=[];S.blocked=[];
+  S.friendsList=[];S.hasDMs={};S.pending=[];S.blocked=[];
 
   async function loadAll(){
     if(!S.user)return;
     const{data:fr}=await sb.from("friends").select("friend_id,user_id,muted").or(`user_id.eq.${S.user.id},friend_id.eq.${S.user.id}`);
-    if(fr){const fids=fr.map(f=>f.user_id===S.user.id?f.friend_id:f.user_id);const mm={};fr.forEach(f=>{const fid=f.user_id===S.user.id?f.friend_id:f.user_id;mm[fid]=f.muted});if(fids.length){const{data:pr}=await sb.from("profiles").select("*").in("id",fids);S.friendsList=(pr||[]).map(p=>({...p,muted:mm[p.id]||false}))}else S.friendsList=[]}else S.friendsList=[];
+    if(fr){const fids=fr.map(f=>f.user_id===S.user.id?f.friend_id:f.user_id);const mm={};fr.forEach(f=>{const fid=f.user_id===S.user.id?f.friend_id:f.user_id;mm[fid]=f.muted});if(fids.length){const{data:pr}=await sb.from("profiles").select("*").in("id",fids);S.friendsList=(pr||[]).map(p=>({...p,muted:mm[p.id]||false}));}else S.friendsList=[]}else S.friendsList=[];
+    // Load which friends have DMs
+    if(S.friendsList.length){
+      const allFids=S.friendsList.map(f=>f.id);
+      const{data:dms}=await sb.from("direct_messages").select("sender_id,receiver_id").or(allFids.map(id=>`sender_id.eq.${id},receiver_id.eq.${id}`).join(",")).limit(500);
+      S.hasDMs={};
+      (dms||[]).forEach(d=>{
+        if(d.sender_id===S.user.id)S.hasDMs[d.receiver_id]=true;
+        if(d.receiver_id===S.user.id)S.hasDMs[d.sender_id]=true
+      })
+    }
     const{data:pd}=await sb.from("friend_requests").select("id,sender_id").eq("receiver_id",S.user.id).eq("status","pending");if(pd&&pd.length){const ids=pd.map(r=>r.sender_id);const{data:pr}=await sb.from("profiles").select("*").in("id",ids);const mp={};(pr||[]).forEach(p=>mp[p.id]=p);S.pending=pd.map(r=>({...r,profile:mp[r.sender_id]||{}}))}else S.pending=[];
     const{data:bl}=await sb.from("blocked_users").select("blocked_id").eq("blocker_id",S.user.id);if(bl&&bl.length){const ids=bl.map(b=>b.blocked_id);const{data:pr}=await sb.from("profiles").select("*").in("id",ids);S.blocked=pr||[]}else S.blocked=[]
   }
 
-  // ---- CHATS (only chats, no friends) ----
   async function showChatsPage(){
     S.ui.activateNav("chats");const sp=document.getElementById("sub-panel");if(sp)sp.classList.remove("collapsed");
     await loadAll();S.ui.setSubPanelHeader("Чаты");
     const render=()=>{
       let h=`<div style="padding:8px 12px;"><input class="input" id="chat-search" placeholder="Поиск..." style="font-size:12px;"></div>`;
-      const on=S.friendsList.filter(f=>f.status==="online"||f.status==="idle"||f.status==="dnd"),off=S.friendsList.filter(f=>!on.includes(f));
-      [...on,...off].forEach(f=>{const av=f.avatar_url?`<img src="${f.avatar_url}">`:(f.display_name||f.username||"?").charAt(0).toUpperCase();h+=`<div class="sp-item-friend chat-row" data-fid="${f.id}"><div class="avatar avatar-sm">${av}</div><span class="status-dot status-${f.status||"offline"}"></span><span style="flex:1;font-size:13px;">${S.escapeHtml(f.display_name||f.username)}</span></div>`});
-      if(!S.friendsList.length)h+='<div style="padding:16px;text-align:center;font-size:12px;color:var(--text-muted);">Нет чатов</div>';
+      const withDMs=S.friendsList.filter(f=>S.hasDMs[f.id]);
+      withDMs.forEach(f=>{const av=f.avatar_url?`<img src="${f.avatar_url}">`:(f.display_name||f.username||"?").charAt(0).toUpperCase();h+=`<div class="sp-item-friend chat-row" data-fid="${f.id}"><div class="avatar avatar-sm">${av}</div><span class="status-dot status-${f.status||"offline"}"></span><span style="flex:1;font-size:13px;">${S.escapeHtml(f.display_name||f.username)}</span></div>`});
+      if(!withDMs.length)h+='<div style="padding:16px;text-align:center;font-size:12px;color:var(--text-muted);">Нет чатов</div>';
       return h
     };
     S.ui.setSubPanelContent(render());
     S.ui.setMainContent(`<div class="main-content" style="display:flex;align-items:center;justify-content:center;"><div style="text-align:center;color:var(--text-muted);"><i class="fa-solid fa-comment-dots" style="font-size:48px;opacity:0.3;display:block;margin-bottom:16px;"></i><h3>Чаты</h3><p>Выберите чат из списка слева</p></div></div>`);
     S.ui.clearMembers();document.title="Sentcor - Чаты";
-    document.querySelectorAll(".chat-row").forEach(r=>r.addEventListener("click",()=>{S.friends.openChat(r.dataset.fid)}));
-    document.getElementById("chat-search")?.addEventListener("input",e=>{
-      const q=e.target.value.trim().toLowerCase();
-      let h=`<div style="padding:8px 12px;"><input class="input" id="chat-search2" value="${S.escapeHtml(e.target.value)}" placeholder="Поиск..." style="font-size:12px;"></div>`;
-      (S.friendsList||[]).filter(f=>(f.display_name||f.username).toLowerCase().includes(q)).forEach(f=>{const av=f.avatar_url?`<img src="${f.avatar_url}">`:(f.display_name||f.username||"?").charAt(0).toUpperCase();h+=`<div class="sp-item-friend chat-row" data-fid="${f.id}"><div class="avatar avatar-sm">${av}</div><span class="status-dot status-${f.status||"offline"}"></span><span style="flex:1;font-size:13px;">${S.escapeHtml(f.display_name||f.username)}</span></div>`});
-      if(!q)h+=`<div style="padding:16px;text-align:center;font-size:12px;color:var(--text-muted);">Нет чатов</div>`;
-      S.ui.setSubPanelContent(h);document.querySelectorAll(".chat-row").forEach(r=>r.addEventListener("click",()=>{S.friends.openChat(r.dataset.fid)}))
-    })
+    document.querySelectorAll(".chat-row").forEach(r=>r.addEventListener("click",()=>{S.friends.openChat(r.dataset.fid)}))
   }
 
   function openChat(fid){
@@ -41,23 +43,24 @@
     S.chat.loadDMs(f.id);document.title="Sentcor - "+(f.display_name||f.username)
   }
 
-  // ---- FRIENDS (management only) ----
   async function showFriendsPage(){
     S.ui.activateNav("friends");const sp=document.getElementById("sub-panel");if(sp)sp.classList.remove("collapsed");
     await loadAll();S.ui.setSubPanelHeader("Друзья");
     let h=`<div style="padding:8px 12px;"><button class="btn btn-accent-outline" id="add-friend-btn" style="width:100%;font-weight:700;"><i class="fa-solid fa-user-plus"></i> Добавить друга</button></div>`;
     h+=`<div class="sp-section-title">ДРУЗЬЯ — ${S.friendsList.length}</div>`;
-    S.friendsList.forEach(f=>{const av=f.avatar_url?`<img src="${f.avatar_url}">`:(f.display_name||f.username||"?").charAt(0).toUpperCase();h+=`<div class="sp-item-friend" data-fid="${f.id}"><div class="avatar avatar-sm">${av}</div><span class="status-dot status-${f.status||"offline"}"></span><span style="flex:1;font-size:13px;">${S.escapeHtml(f.display_name||f.username)}</span><button class="btn btn-icon btn-ghost btn-sm fdots" data-fid="${f.id}" style="font-size:10px;"><i class="fa-solid fa-ellipsis-vertical"></i></button></div>`});
+    const on=S.friendsList.filter(f=>f.status==="online"||f.status==="idle"||f.status==="dnd"),off=S.friendsList.filter(f=>!on.includes(f));
+    [...on,...off].forEach(f=>{const av=f.avatar_url?`<img src="${f.avatar_url}">`:(f.display_name||f.username||"?").charAt(0).toUpperCase();h+=`<div class="sp-item-friend" data-fid="${f.id}"><div class="avatar avatar-sm">${av}</div><span class="status-dot status-${f.status||"offline"}"></span><span style="flex:1;font-size:13px;">${S.escapeHtml(f.display_name||f.username)}</span><button class="btn btn-icon btn-ghost btn-sm fdots" data-fid="${f.id}" style="font-size:10px;"><i class="fa-solid fa-ellipsis-vertical"></i></button></div>`});
     if(!S.friendsList.length)h+='<div style="padding:16px;text-align:center;font-size:12px;color:var(--text-muted);">Нет друзей</div>';
     if(S.pending.length){h+=`<div class="sp-section-title">ВХОДЯЩИЕ — ${S.pending.length}</div>`;S.pending.forEach(r=>{const p=r.profile||{};h+=`<div class="sp-item-friend"><span style="flex:1;">${S.escapeHtml(p.username||"?")}</span><div style="display:flex;gap:4px;"><button class="btn btn-sm btn-primary accept-btn" data-rid="${r.id}"><i class="fa-solid fa-check"></i></button><button class="btn btn-sm btn-danger decline-btn" data-rid="${r.id}"><i class="fa-solid fa-xmark"></i></button></div></div>`})}
     if(S.blocked.length){h+=`<div class="sp-section-title">ЗАБЛОКИРОВАННЫЕ — ${S.blocked.length}</div>`;S.blocked.forEach(b=>h+=`<div class="sp-item-friend"><span>🚫 ${S.escapeHtml(b.username||"?")}</span><button class="btn btn-sm btn-ghost unblock-btn" data-uid="${b.id}" style="margin-left:auto;">Разблок.</button></div>`)}
     S.ui.setSubPanelContent(h);
     document.getElementById("add-friend-btn")?.addEventListener("click",showAddModal);
+    document.querySelectorAll("#sp-content .sp-item-friend[data-fid]").forEach(el=>el.addEventListener("click",()=>openChat(el.dataset.fid)));
     document.querySelectorAll(".fdots").forEach(b=>b.addEventListener("click",e=>{e.stopPropagation();showMenu(b.dataset.fid,e.clientX,e.clientY)}));
     document.querySelectorAll(".accept-btn").forEach(b=>b.addEventListener("click",e=>{e.stopPropagation();acceptReq(b.dataset.rid)}));
     document.querySelectorAll(".decline-btn").forEach(b=>b.addEventListener("click",e=>{e.stopPropagation();declineReq(b.dataset.rid)}));
     document.querySelectorAll(".unblock-btn").forEach(b=>b.addEventListener("click",e=>{e.stopPropagation();unblock(b.dataset.uid)}));
-    S.ui.setMainContent(`<div class="main-content" style="display:flex;align-items:center;justify-content:center;"><div style="text-align:center;color:var(--text-muted);"><i class="fa-solid fa-user-group" style="font-size:48px;opacity:0.3;display:block;margin-bottom:16px;"></i><h3>Друзья</h3><p>Управляйте друзьями и заявками</p></div></div>`);
+    S.ui.setMainContent(`<div class="main-content" style="display:flex;align-items:center;justify-content:center;"><div style="text-align:center;color:var(--text-muted);"><i class="fa-solid fa-user-group" style="font-size:48px;opacity:0.3;display:block;margin-bottom:16px;"></i><h3>Друзья</h3><p>Нажмите на друга, чтобы открыть чат</p></div></div>`);
     S.ui.clearMembers();document.title="Sentcor - Друзья"
   }
 
