@@ -1,4 +1,4 @@
-// SENTCOR v7 — UI (settings in footer, no sidebar settings icon)
+// SENTCOR v9 — UI (footer → profile modal, fixed empty brackets)
 (function(){
   "use strict";
   const S=window.SENTCOR;
@@ -22,23 +22,7 @@
 
   function showApp(){
     const app=$("#app");if(!app)return;
-    app.innerHTML=`<div id="sidebar">
-      <div class="sidebar-logo" id="home-btn" title="Главная"><span>S</span></div><div class="sidebar-sep"></div>
-      <div class="sidebar-nav" id="nav-chats" title="Чаты"><i class="fa-solid fa-comment-dots"></i></div>
-      <div class="sidebar-nav active" id="nav-friends" title="Друзья"><i class="fa-solid fa-user-group"></i></div>
-      <div class="sidebar-nav" id="nav-servers" title="Серверы"><i class="fa-solid fa-server"></i></div>
-      <div class="sidebar-sep"></div><div id="sidebar-servers"></div>
-      <div class="server-icon-nav" id="add-server-btn" title="Создать сервер"><i class="fa-solid fa-plus"></i></div>
-      <div style="flex:1;"></div>
-      <div class="sidebar-nav" id="nav-profile" title="Профиль"><i class="fa-solid fa-user"></i></div>
-    </div>
-    <div id="sub-panel">
-      <div class="sp-header"><span id="sp-title">Друзья</span><div class="sp-header-actions"><button class="btn btn-icon btn-ghost btn-sm" id="sp-toggle" title="Скрыть"><i class="fa-solid fa-angles-left"></i></button></div></div>
-      <div class="sp-content" id="sp-content"></div>
-      <div class="sp-footer"><div class="status-avatar-wrapper"><div class="avatar" id="footer-avatar" style="cursor:pointer"></div><span class="status-dot status-online" id="footer-dot"></span></div><div class="user-info"><div class="username" id="footer-username"></div><div class="user-status" id="footer-status"></div></div><div class="sp-footer-actions"><button class="btn btn-icon btn-ghost btn-sm" id="settings-btn" title="Настройки"><i class="fa-solid fa-gear"></i></button></div></div>
-    </div>
-    <div id="main-area"></div>
-    <div id="members-list"></div>`;
+    app.innerHTML=`<div id="sidebar"><div class="sidebar-logo" id="home-btn" title="Главная"><span>S</span></div><div class="sidebar-sep"></div><div class="sidebar-nav" id="nav-chats" title="Чаты"><i class="fa-solid fa-comment-dots"></i></div><div class="sidebar-nav active" id="nav-friends" title="Друзья"><i class="fa-solid fa-user-group"></i></div><div class="sidebar-nav" id="nav-servers" title="Серверы"><i class="fa-solid fa-server"></i></div><div class="sidebar-sep"></div><div id="sidebar-servers"></div><div class="server-icon-nav" id="add-server-btn" title="Создать сервер"><i class="fa-solid fa-plus"></i></div><div style="flex:1;"></div><div class="sidebar-nav" id="nav-profile" title="Профиль"><i class="fa-solid fa-user"></i></div></div><div id="sub-panel"><div class="sp-header"><span id="sp-title">Друзья</span><div class="sp-header-actions"><button class="btn btn-icon btn-ghost btn-sm" id="sp-toggle" title="Скрыть"><i class="fa-solid fa-angles-left"></i></button></div></div><div class="sp-content" id="sp-content"></div><div class="sp-footer"><div class="status-avatar-wrapper"><div class="avatar" id="footer-avatar" style="cursor:pointer"></div><span class="status-dot status-online" id="footer-dot"></span></div><div class="user-info"><div class="username" id="footer-username"></div><div class="user-status" id="footer-status"></div></div><div class="sp-footer-actions"><button class="btn btn-icon btn-ghost btn-sm" id="settings-btn" title="Настройки"><i class="fa-solid fa-gear"></i></button></div></div></div><div id="main-area"></div><div id="members-list"></div>`;
     updateFooter();bindSidebar();S.servers.loadSidebarServers();S.friends.loadAll().then(()=>showHomePage());
     if(S.voice&&S.voice.listenForCalls)S.voice.listenForCalls()
   }
@@ -52,7 +36,7 @@
     document.getElementById("add-server-btn")?.addEventListener("click",()=>{S.servers.showCreateModal()});
     document.getElementById("sp-toggle")?.addEventListener("click",()=>{const sp=document.getElementById("sub-panel");if(sp)sp.classList.toggle("collapsed")});
     document.getElementById("settings-btn")?.addEventListener("click",()=>{activateNav("");if(S.profileMod)S.profileMod.showSettings()});
-    document.getElementById("footer-avatar")?.addEventListener("click",()=>{if(S.profileMod)S.profileMod.showStatusSelector()})
+    document.getElementById("footer-avatar")?.addEventListener("click",()=>{if(S.profileMod)S.profileMod.openMyProfileModal()})
   }
 
   function activateNav(nav){$$("#sidebar .sidebar-nav").forEach(e=>e.classList.remove("active"));$$("#sidebar .server-icon-nav").forEach(e=>e.classList.remove("active"));const el=document.getElementById("nav-"+nav);if(el)el.classList.add("active");const sp=document.getElementById("sub-panel");if(sp)sp.classList.remove("collapsed")}
@@ -63,7 +47,7 @@
     if(av)av.innerHTML=S.profile.avatar_url?`<img src="${S.profile.avatar_url}">`:(S.profile.display_name||S.profile.username||"?").charAt(0).toUpperCase();
     if(un)un.textContent=S.profile.display_name||S.profile.username;
     const sm={online:"В сети",idle:"Не активен",dnd:"Не беспокоить",offline:"Не в сети"};
-    if(st)st.textContent=S.profile.custom_status||sm[S.profile.status]||"";
+    if(st)st.textContent=S.profile.custom_status||sm[S.profile.status]||"Не в сети";
     if(dot)dot.className="status-dot status-"+(S.profile.status||"offline")
   }
   function setSPHeader(t){const h=document.getElementById("sp-title");if(h)h.textContent=t}
@@ -76,7 +60,7 @@
     const p=S.profile||{};const friends=S.friendsList||[];
     const online=friends.filter(f=>f.status==="online"||f.status==="idle"||f.status==="dnd");
     let h=`<div class="main-content"><div class="main-header" style="display:flex;align-items:center;gap:8px;padding-bottom:16px;border-bottom:1px solid var(--border);margin-bottom:16px;"><i class="fa-solid fa-house"></i> Главная</div><h2 style="font-size:20px;color:var(--text-bright);">Добро пожаловать, ${esc(p.display_name||p.username||"игрок")}!</h2><p style="color:var(--text-muted);font-size:13px;margin-bottom:24px;">Общайтесь с друзьями в текстовых и голосовых каналах</p><div class="home-section-title">ДРУЗЬЯ В СЕТИ — ${online.length}</div>`;
-    if(online.length){online.forEach(f=>{const av=f.avatar_url?`<img src="${f.avatar_url}">`:(f.display_name||f.username||"?").charAt(0).toUpperCase();h+=`<div class="home-friend-card" data-fid="${f.id}"><div class="friend-avatar"><div class="avatar">${av}</div><span class="status-dot status-${f.status}"></span></div><div class="friend-info"><div class="friend-name">${esc(f.display_name||f.username)}</div><div class="friend-meta">${f.game_status?esc(f.game_status):"В сети"}</div></div></div>`})}
+    if(online.length){online.forEach(f=>{const av=f.avatar_url?`<img src="${f.avatar_url}">`:(f.display_name||f.username||"?").charAt(0).toUpperCase();h+=`<div class="home-friend-card" data-fid="${f.id}"><div class="friend-avatar"><div class="avatar">${av}</div><span class="status-dot status-${f.status}"></span></div><div class="friend-info"><div class="friend-name">${esc(f.display_name||f.username)}</div><div class="friend-meta">${f.custom_status?esc(f.custom_status):(f.status==="online"?"В сети":"Не в сети")}</div></div></div>`})}
     else{h+=`<div class="home-empty"><i class="fa-solid fa-users"></i><h3>Никого нет в сети</h3><p>Когда ваши друзья зайдут, они появятся здесь.</p></div>`}
     h+=`</div>`;setMain(h);clearMembers();
     document.querySelectorAll(".home-friend-card").forEach(c=>c.addEventListener("click",()=>{if(S.friends)S.friends.openChat(c.dataset.fid)}))
@@ -116,8 +100,8 @@
     ct.appendChild(el);ct.scrollTop=ct.scrollHeight
   }
   function renderMembers(members){const list=document.getElementById("members-list");if(!list)return;const on=members.filter(m=>m.status==="online"||m.status==="idle"||m.status==="dnd"),off=members.filter(m=>!on.includes(m));let h="";if(on.length){h+=`<div class="sp-section-title">В сети — ${on.length}</div>`;on.forEach(m=>h+=memberItem(m))}if(off.length){h+=`<div class="sp-section-title">Не в сети — ${off.length}</div>`;off.forEach(m=>h+=memberItem(m))}list.innerHTML=h}
-  function memberItem(m){const av=m.avatar_url?`<img src="${m.avatar_url}">`:(m.display_name||m.username||"?").charAt(0).toUpperCase();return `<div class="sp-item-friend"><div class="avatar avatar-sm">${av}</div><span class="status-dot status-${m.status||"offline"}"></span><span style="flex:1;font-size:12px;">${esc(m.display_name||m.username)}</span>${m.game_status?`<span style="font-size:10px;color:var(--text-muted);">${esc(m.game_status)}</span>`:""}</div>`}
-  function renderFriendInfo(friend){const sm={online:"🟢 В сети",idle:"🟡 Не активен",dnd:"🔴 Не беспокоить",offline:"⚫ Не в сети"};const av=friend.avatar_url?`<img src="${friend.avatar_url}">`:(friend.display_name||friend.username||"?").charAt(0).toUpperCase();let h=`<div class="sp-section-title">О пользователе</div><div style="padding:16px;text-align:center;"><div class="avatar avatar-lg" style="margin:0 auto 10px;">${av}</div><div style="font-weight:700;font-size:15px;color:var(--text-bright);">${esc(friend.display_name||friend.username)}</div><div style="font-size:12px;color:var(--text-muted);margin-top:2px;">${sm[friend.status]||"⚫ Не в сети"}</div>${friend.game_status?`<div style="font-size:12px;color:var(--green);margin-top:4px;">🎮 ${esc(friend.game_status)}</div>`:""}`;if(friend.custom_status)h+=`<div style="font-size:11px;color:var(--text-secondary);margin-top:4px;">${esc(friend.custom_status)}</div>`;h+=`</div>`;setMembers(h)}
+  function memberItem(m){const av=m.avatar_url?`<img src="${m.avatar_url}">`:(m.display_name||m.username||"?").charAt(0).toUpperCase();return `<div class="sp-item-friend"><div class="avatar avatar-sm">${av}</div><span class="status-dot status-${m.status||"offline"}"></span><span style="flex:1;font-size:12px;">${esc(m.display_name||m.username)}</span>${m.custom_status?`<span style="font-size:10px;color:var(--text-muted);">${esc(m.custom_status)}</span>`:""}</div>`}
+  function renderFriendInfo(friend){const sm={online:"🟢 В сети",idle:"🟡 Не активен",dnd:"🔴 Не беспокоить",offline:"⚫ Не в сети"};const av=friend.avatar_url?`<img src="${friend.avatar_url}">`:(friend.display_name||friend.username||"?").charAt(0).toUpperCase();let h=`<div class="sp-section-title">О пользователе</div><div style="padding:16px;text-align:center;"><div class="avatar avatar-lg" style="margin:0 auto 10px;">${av}</div><div style="font-weight:700;font-size:15px;color:var(--text-bright);">${esc(friend.display_name||friend.username)}</div><div style="font-size:12px;color:var(--text-muted);margin-top:2px;">${sm[friend.status]||"⚫ Не в сети"}</div>${friend.custom_status?`<div style="font-size:12px;color:var(--text-secondary);margin-top:4px;">${esc(friend.custom_status)}</div>`:""}`;h+=`</div>`;setMembers(h)}
 
   function esc(s){if(!s)return"";const d=document.createElement("div");d.textContent=s;return d.innerHTML}
   S.escapeHtml=esc;function resetCompact(){_lastAuthor=null}
