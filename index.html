@@ -32,8 +32,9 @@
       const S=window.SENTCOR;
       S.ui.showAuth();
       const ok=await S.auth.initSession();
-      if(ok){await S.auth.setOnlineStatus("online");S.ui.showApp()}
+      if(ok){S.appLoaded=true;await S.auth.setOnlineStatus("online");S.ui.showApp()}
       window.addEventListener("beforeunload",()=>{if(S.user){const u=S.SENTCOR_CONFIG.SUPABASE_URL+"/rest/v1/profiles?id=eq."+S.user.id;navigator.sendBeacon(u,new Blob([JSON.stringify({status:"offline",last_login:new Date().toISOString()})],{type:"application/json"}))}})
+      document.addEventListener("freeze",()=>{});
     })();
   </script>
 </body>

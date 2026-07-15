@@ -25,8 +25,7 @@
     if(!S.user||!chId||!content)return{error:"Missing data"};
     const trimmed=content.trim().slice(0,S.SENTCOR_CONFIG.MAX_MESSAGE_LENGTH);
     const{data,error}=await sb.from("messages").insert({channel_id:chId,sender_id:S.user.id,content:trimmed}).select();
-    if(!error&&data&&data[0]){const m=data[0];if(!shownIds.has(m.id)){shownIds.add(m.id);if(!pCache[m.sender_id])await fetchProfiles([m.sender_id]);S.ui.appendMessage(m,pCache)}}
-    return{data,error}
+    return{data:data?data[0]:null,error}
   }
 
   async function loadDMs(friendId){
@@ -46,8 +45,7 @@
     if(!S.user||!receiverId||!content)return{error:"Missing data"};
     const trimmed=content.trim().slice(0,S.SENTCOR_CONFIG.MAX_MESSAGE_LENGTH);
     const{data,error}=await sb.from("direct_messages").insert({sender_id:S.user.id,receiver_id:receiverId,content:trimmed}).select();
-    if(!error&&data&&data[0]){const m=data[0];if(!shownIds.has(m.id)){shownIds.add(m.id);if(!pCache[m.sender_id])await fetchProfiles([m.sender_id]);S.ui.appendMessage(m,pCache)}}
-    return{data,error}
+    return{data:data?data[0]:null,error}
   }
 
   S.chat={loadMessages,sendMessage,loadDMs,sendDM,unsub,fetchProfiles,pCache};
