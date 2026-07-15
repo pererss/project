@@ -39,7 +39,8 @@
     </div>
     <div id="main-area"></div>
     <div id="members-list"></div>`;
-    updateFooter();bindSidebar();S.servers.loadSidebarServers();S.friends.loadAll().then(()=>showHomePage())
+    updateFooter();bindSidebar();S.servers.loadSidebarServers();S.friends.loadAll().then(()=>showHomePage());
+    if(S.voice&&S.voice.listenForCalls)S.voice.listenForCalls()
   }
 
   function bindSidebar(){
