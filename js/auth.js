@@ -109,13 +109,11 @@
   async function changePassword(npw){if(!S.user)return{error:"Not logged in"};const{error}=await sb.auth.updateUser({password:npw});if(!error)S.ui.toast("Пароль изменён!","success");return{error}}
 
   sb.auth.onAuthStateChange(async(event,session)=>{
-    if(event==="SIGNED_IN"&&session&&!S.appLoaded){
-      S.user=session.user;S.session=session;await fetchProfile();await recordLogin();await setOnlineStatus("online");
-      if(S.ui&&S.ui.showApp){S.ui.showApp();S.appLoaded=true}
-    }else if(event==="SIGNED_OUT"){
-      S.user=null;S.profile=null;S.session=null;S.appLoaded=false;
-      if(S.ui&&S.ui.showAuth)S.ui.showAuth()
-    }
+    if(event==="SIGNED_IN"&&session){
+      if(!S.appLoaded){S.user=session.user;S.session=session;await fetchProfile();await recordLogin();await setOnlineStatus("online");if(S.ui&&S.ui.showApp){S.ui.showApp();S.appLoaded=true}}
+      else{S.user=session.user;S.session=session;await fetchProfile()}
+    }else if(event==="TOKEN_REFRESHED"&&session){S.user=session.user;S.session=session}
+    else if(event==="SIGNED_OUT"){S.user=null;S.profile=null;S.session=null;S.appLoaded=false;if(S.ui&&S.ui.showAuth)S.ui.showAuth()}
   });
 
   S.auth={initSession,fetchProfile,updateProfile,uploadAvatar,signUp,signIn,signOut,setOnlineStatus,recordLogin,canChangeUsername,daysUntilUsernameChange,changePassword,compressAvatar}
