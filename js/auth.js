@@ -76,6 +76,10 @@
   }
 
   async function signUp(email,password,username){
+    email = email.trim().toLowerCase();
+    if(!email || !email.includes("@")) {
+      return {error: "Некорректный email"};
+    }
     const{data,error}=await sb.auth.signUp({email,password,options:{data:{username,display_name:username}}});
     if(error)return{error};
     if(data.user){S.user=data.user;S.session=data.session;await fetchProfile()}
