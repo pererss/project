@@ -93,6 +93,15 @@
     return{data}
   }
 
+  async function signInWithGoogle(){
+    const{data,error}=await sb.auth.signInWithOAuth({
+      provider: 'google',
+      options: {redirectTo: window.location.origin}
+    });
+    if(error)console.error('Google Auth Error:',error.message);
+    return{data,error}
+  }
+
   async function signOut(){await setOnlineStatus("offline");await sb.auth.signOut();S.user=null;S.profile=null;S.session=null;S.appLoaded=false}
   async function recordLogin(){if(!S.user)return;try{await sb.from("daily_logins").insert({user_id:S.user.id,login_date:new Date().toISOString().slice(0,10)})}catch(e){}}
   async function setOnlineStatus(status){
