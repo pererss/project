@@ -32,6 +32,7 @@
 
   async function updateProfile(upd){
     if(!S.user)return{error:"Not logged in"};
+    if(!upd)return{error:"No updates provided"};
     if(!S.profile)await fetchProfile();
     if(!S.profile)return{error:"Profile not found"};
     const{data,error}=await sb.from("profiles").update(upd).eq("id",S.user.id).select().maybeSingle();
@@ -77,8 +78,12 @@
 
   async function signUp(email,password,username){
     email = email.trim().toLowerCase();
+    username = username.trim();
     if(!email || !email.includes("@")) {
       return {error: "Некорректный email"};
+    }
+    if(!username || username.length < 3) {
+      return {error: "Имя пользователя должно содержать не менее 3 символов"};
     }
     const{data,error}=await sb.auth.signUp({email,password,options:{data:{username,display_name:username}}});
     if(error)return{error};

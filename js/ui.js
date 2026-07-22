@@ -93,7 +93,9 @@
   let _lastAuthor=null;
   function appendMessage(msg,pMap={}){
     const ct=document.getElementById("chat-messages");if(!ct)return;const em=ct.querySelector(".empty-state");if(em)em.remove();
-    const s=pMap[msg.sender_id]||{};const author=s.display_name||s.username||"?";const av=s.avatar_url||"";const time=new Date(msg.created_at).toLocaleTimeString([],{hour:"2-digit",minute:"2-digit"});
+    const isOwn = msg.sender_id === S.user.id;
+    const s= isOwn ? S.profile : (pMap[msg.sender_id]||{});
+    const author=s.display_name||s.username||"?";const av=s.avatar_url||"";const time=new Date(msg.created_at).toLocaleTimeString([],{hour:"2-digit",minute:"2-digit"});
     const showHeader=(author!==_lastAuthor);_lastAuthor=author;
     const el=document.createElement("div");el.className="message";el.id="msg-"+msg.id;el.dataset.senderId=msg.sender_id;el.dataset.msgId=msg.id;
     el.innerHTML=showHeader?`<div class="avatar">${av?`<img src="${av}">`:author.charAt(0).toUpperCase()}</div><div class="message-body"><div class="message-header"><span class="message-author">${esc(author)}</span><span class="message-time">${time}</span></div><div class="message-content">${esc(msg.content)}</div>${msg.edited?'<span class="message-edited">(изменено)</span>':''}</div>`:`<div class="avatar" style="visibility:hidden;"></div><div class="message-body"><div class="message-content">${esc(msg.content)}</div></div>`;

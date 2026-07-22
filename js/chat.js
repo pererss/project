@@ -24,6 +24,7 @@
   function unsub(){if(sub){sb.removeChannel(sub);sub=null}}
 
   async function fetchProfiles(ids){
+    if (!ids) return;
     const miss=ids.filter(id=>!pCache[id]);
     if(!miss.length)return;
     const{data}=await sb.from("profiles").select("id,username,display_name,avatar_url,status,custom_status").in("id",miss);
