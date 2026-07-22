@@ -4,21 +4,31 @@
   S.user=null;S.profile=null;S.session=null;S.appLoaded=false;
 
   async function initSession(){
-    const{data}=await sb.auth.getSession();
-    if(data.session){S.session=data.session;S.user=data.session.user;await fetchProfile();return true}
-    return false
+    try {
+      const{data}=await sb.auth.getSession();
+      if(data.session){S.session=data.session;S.user=data.session.user;await fetchProfile();return true}
+      return false
+    } catch (e) {
+      console.error("initSession failed:", e);
+      return false;
+    }
   }
 
   async function fetchProfile(){
     if(!S.user)return;
-    const{data,error}=await sb.from("profiles").select("*").eq("id",S.user.id).maybeSingle();
-    if(error){console.error("fetchProfile:",error.message);return}
-    if(data){S.profile=data;applyTheme(data.theme);return}
-    console.warn("Profile missing, creating for",S.user.id);
-    const username=S.user.user_metadata?.username||("user_"+S.user.id.slice(0,8));
-    const{data:newP,error:insErr}=await sb.from("profiles").insert({id:S.user.id,username,display_name:username,created_at:new Date().toISOString()}).select().maybeSingle();
-    if(insErr){console.error("Auto-create failed:",insErr.message);return}
-    if(newP){S.profile=newP;applyTheme(newP.theme)}
+    try {
+      const{data,error}=await sb.from("profiles").select("*").eq("id",S.user.id).maybeSingle();
+      if(error) throw error;
+      if(data){S.profile=data;applyTheme(data.theme);return}
+      
+      console.warn("Profile missing, creating for",S.user.id);
+      const username=S.user.user_metadata?.username||("user_"+S.user.id.slice(0,8));
+      const{data:newP,error:insErr}=await sb.from("profiles").insert({id:S.user.id,username,display_name:username,created_at:new Date().toISOString()}).select().maybeSingle();
+      if(insErr) throw insErr;
+      if(newP){S.profile=newP;applyTheme(newP.theme)}
+    } catch (e) {
+      console.error("fetchProfile failed:", e.message);
+    }
   }
 
   function applyTheme(t){
@@ -33,13 +43,18 @@
   async function updateProfile(upd){
     if(!S.user)return{error:"Not logged in"};
     if(!upd)return{error:"No updates provided"};
-    if(!S.profile)await fetchProfile();
-    if(!S.profile)return{error:"Profile not found"};
-    const{data,error}=await sb.from("profiles").update(upd).eq("id",S.user.id).select().maybeSingle();
-    if(error)return{error};
-    if(data){Object.assign(S.profile,data);if(upd.theme)applyTheme(data.theme)}
-    else{await sb.from("profiles").upsert({id:S.user.id,...upd,username:S.profile.username||"user_"+S.user.id.slice(0,8)});await fetchProfile()}
-    return{data:null,error:null}
+    try {
+      if(!S.profile)await fetchProfile();
+      if(!S.profile)return{error:"Profile not found"};
+      const{data,error}=await sb.from("profiles").update(upd).eq("id",S.user.id).select().maybeSingle();
+      if(error) throw error;
+      if(data){Object.assign(S.profile,data);if(upd.theme)applyTheme(data.theme)}
+      else{await sb.from("profiles").upsert({id:S.user.id,...upd,username:S.profile.username||"user_"+S.user.id.slice(0,8)});await fetchProfile()}
+      return{data:null,error:null}
+    } catch (e) {
+      console.error("updateProfile failed:", e.message);
+      return {error: e.message};
+    }
   }
 
   // ---- COMPRESS AVATAR ----
@@ -66,36 +81,50 @@
 
   async function uploadAvatar(file){
     if(!S.user)return{error:"Not logged in"};
-    const small=await compressAvatar(file);
-    const fp=`avatars/${S.user.id}_${Date.now()}.webp`;
-    const{error:ue}=await sb.storage.from("avatars").upload(fp,small,{upsert:true});
-    if(ue)return{error:ue};
-    const{data:ud}=sb.storage.from("avatars").getPublicUrl(fp);
-    const{error:pe}=await sb.from("profiles").update({avatar_url:ud.publicUrl}).eq("id",S.user.id);
-    if(!pe){S.profile.avatar_url=ud.publicUrl;if(S.ui)try{S.ui.updateFooter()}catch(e){}}
-    return{url:ud.publicUrl,error:pe}
+    try {
+      const small=await compressAvatar(file);
+      const fp=`avatars/${S.user.id}_${Date.now()}.webp`;
+      const{error:ue}=await sb.storage.from("avatars").upload(fp,small,{upsert:true});
+      if(ue) throw ue;
+      const{data:ud}=sb.storage.from("avatars").getPublicUrl(fp);
+      const{error:pe}=await sb.from("profiles").update({avatar_url:ud.publicUrl}).eq("id",S.user.id);
+      if(pe) throw pe;
+      S.profile.avatar_url=ud.publicUrl;
+      if(S.ui)try{S.ui.updateFooter()}catch(e){}
+      return{url:ud.publicUrl,error:null}
+    } catch (e) {
+      console.error("uploadAvatar failed:", e.message);
+      return {error: e.message};
+    }
   }
 
   async function signUp(email,password,username){
-    email = email.trim().toLowerCase();
-    username = username.trim();
-    if(!email || !email.includes("@")) {
-      return {error: "Некорректный email"};
+    try {
+      email = email.trim().toLowerCase();
+      username = username.trim();
+      if(!email || !email.includes("@")) throw new Error("Некорректный email");
+      if(!username || username.length < 3) throw new Error("Имя пользователя должно содержать не менее 3 символов");
+      
+      const{data,error}=await sb.auth.signUp({email,password,options:{data:{username,display_name:username}}});
+      if(error) throw error;
+      if(data.user){S.user=data.user;S.session=data.session;await fetchProfile()}
+      return{data}
+    } catch (e) {
+      console.error("signUp failed:", e.message);
+      return {error: e.message};
     }
-    if(!username || username.length < 3) {
-      return {error: "Имя пользователя должно содержать не менее 3 символов"};
-    }
-    const{data,error}=await sb.auth.signUp({email,password,options:{data:{username,display_name:username}}});
-    if(error)return{error};
-    if(data.user){S.user=data.user;S.session=data.session;await fetchProfile()}
-    return{data}
   }
 
   async function signIn(email,password){
-    const{data,error}=await sb.auth.signInWithPassword({email,password});
-    if(error)return{error};
-    S.user=data.user;S.session=data.session;await fetchProfile();await recordLogin();await setOnlineStatus("online");
-    return{data}
+    try {
+      const{data,error}=await sb.auth.signInWithPassword({email,password});
+      if(error) throw error;
+      S.user=data.user;S.session=data.session;await fetchProfile();await recordLogin();await setOnlineStatus("online");
+      return{data}
+    } catch (e) {
+      console.error("signIn failed:", e.message);
+      return {error: e.message};
+    }
   }
 
   async function signInWithGoogle(){
@@ -124,7 +153,19 @@
     if(!S.profile||!S.profile.last_username_change)return 0;
     return Math.max(0,Math.ceil(C.USERNAME_CHANGE_COOLDOWN_DAYS-(Date.now()-new Date(S.profile.last_username_change).getTime())/(86400000)))
   }
-  async function changePassword(npw){if(!S.user)return{error:"Not logged in"};const{error}=await sb.auth.updateUser({password:npw});if(!error)S.ui.toast("Пароль изменён!","success");return{error}}
+  async function changePassword(npw){
+    if(!S.user)return{error:"Not logged in"};
+    try {
+      const{error}=await sb.auth.updateUser({password:npw});
+      if(error) throw error;
+      S.toast("Пароль изменён!","success");
+      return{error:null}
+    } catch (e) {
+      console.error("changePassword failed:", e.message);
+      S.toast("Ошибка смены пароля: " + e.message,"error");
+      return {error: e.message};
+    }
+  }
 
   sb.auth.onAuthStateChange(async(event,session)=>{
     if(event==="SIGNED_IN"&&session){

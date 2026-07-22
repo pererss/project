@@ -16,6 +16,8 @@
   --font:'Inter','Segoe UI',system-ui,sans-serif;
   background:var(--bg-deepest);
 }
+
+.theme-monochrome{--bg-deepest:#000;--bg-primary:#111;--bg-secondary:#222;--bg-tertiary:#333;--bg-hover:#444;--bg-active:#555;--text-primary:#fff;--text-secondary:#ccc;--text-muted:#888;--text-bright:#fff;--accent:#fff;--accent-light:#fff;--accent-dark:#eee;--accent-glow:rgba(255,255,255,0.2);--green:#8f8;--red:#f88;--yellow:#ff8;--blue:#88f;--border:#333;--border-light:#444;background:#000}
 .theme-oled{--bg-deepest:#000;--bg-primary:#050505;--bg-secondary:#0a0a0a;--bg-tertiary:#101010;--bg-hover:#1a1a1a;--bg-active:#252525;--text-primary:#e0e0e0;--text-secondary:#a0a0a0;--text-muted:#606060;--text-bright:#fff;--accent:#ff6b35;--accent-light:#ff8c5a;--accent-dark:#cc552a;--green:#4caf50;--red:#ef4444;--yellow:#f59e0b;--blue:#3b82f6;--border:#1a1a1a;--border-light:#2a2a2a;background:#000}
 .theme-midnight{--bg-deepest:#0a0e1a;--bg-primary:#0f1425;--bg-secondary:#141a30;--bg-tertiary:#1a2040;--bg-hover:#222850;--bg-active:#2a3060;--text-primary:#c8d0e0;--text-secondary:#9098b8;--text-muted:#606888;--text-bright:#e8ecf8;--accent:#6c8cff;--accent-light:#8aa4ff;--accent-dark:#4a6ae8;--green:#4ade80;--red:#f87171;--yellow:#fbbf24;--blue:#60a5fa;--border:#1a2040;--border-light:#2a3060;background:#0a0e1a}
 .theme-forest{--bg-deepest:#0a120a;--bg-primary:#0f190f;--bg-secondary:#142014;--bg-tertiary:#1a2c1a;--bg-hover:#223622;--bg-active:#2a422a;--text-primary:#c8e0c8;--text-secondary:#90b890;--text-muted:#608860;--text-bright:#e8f8e8;--accent:#4a9e4a;--accent-light:#6ab86a;--accent-dark:#388038;--green:#6ad46a;--red:#f07171;--yellow:#f4c02e;--blue:#60a5fa;--border:#1a2c1a;--border-light:#2a3e2a;background:#0a120a}
@@ -74,8 +76,10 @@ input,button,textarea,select{font-family:inherit;font-size:inherit;color:inherit
 .modal-body{padding:16px 24px 20px}.modal-footer{display:flex;gap:8px;justify-content:flex-end;padding:0 24px 20px}
 
 /* ---- TOAST ---- */
-.toast-container{position:fixed;bottom:20px;right:20px;z-index:2000;display:flex;flex-direction:column;gap:8px}
-.toast{display:flex;align-items:center;gap:10px;padding:12px 16px;border-radius:var(--radius-md);font-size:13px;box-shadow:0 4px 20px rgba(0,0,0,0.6);animation:toastIn 200ms var(--ease);max-width:380px;cursor:pointer;background:var(--bg-primary);border:1px solid var(--border-light);color:var(--text-primary)}
+.toast-container{position:fixed;top:20px;right:20px;z-index:2000;display:flex;flex-direction:column;gap:8px}
+.toast{display:flex;flex-direction:column;gap:10px;padding:12px 16px;border-radius:var(--radius-md);font-size:13px;box-shadow:0 4px 20px rgba(0,0,0,0.6);animation:toastIn 200ms var(--ease);max-width:380px;cursor:pointer;background:var(--bg-primary);border:1px solid var(--border-light);color:var(--text-primary); overflow: hidden;}
+.toast-progress-bar {height: 4px; background-color: var(--accent); width: 100%;}
+@keyframes progress {from {width: 100%;} to {width: 0%;}}
 .toast:hover{background:var(--bg-hover)}.toast .toast-avatar{width:36px;height:36px;border-radius:50%;flex-shrink:0}
 .toast .toast-body{flex:1;min-width:0}.toast .toast-author{font-weight:700;font-size:12px}.toast .toast-preview{font-size:11px;color:var(--text-muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 

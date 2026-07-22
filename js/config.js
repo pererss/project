@@ -9,6 +9,6 @@ window.SENTCOR_CONFIG = {
   COINS_PER_DAY_BASE: 10,
   MAX_STREAK_BONUS: 100,
   USERNAME_CHANGE_COOLDOWN_DAYS: 7,
-  THEMES: ["caramel","oled","midnight"],
-  DEFAULT_THEME: "caramel"
+  THEMES: ["monochrome","caramel","oled","midnight"],
+  DEFAULT_THEME: "monochrome"
 };

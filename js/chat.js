@@ -7,18 +7,23 @@
 
   async function loadMessages(chId){
     curCh=chId;unsub();S.ui.resetCompact();shownIds.clear();localSent.clear();
-    const{data:msgs}=await sb.from("messages").select("*").eq("channel_id",chId).order("created_at",{ascending:true}).limit(100);
-    const ids=[...new Set((msgs||[]).map(m=>m.sender_id))];await fetchProfiles(ids);
-    const ct=document.getElementById("chat-messages");if(!ct)return;
-    ct.innerHTML="";if(!msgs||!msgs.length)ct.innerHTML='<div class="empty-state"><h3>Пока нет сообщений</h3><p>Будьте первым!</p></div>';
-    else msgs.forEach(m=>{shownIds.add(m.id);S.ui.appendMessage(m,pCache)});ct.scrollTop=ct.scrollHeight;
-    sub=sb.channel("msgs-"+chId).on("postgres_changes",{event:"INSERT",schema:"public",table:"messages",filter:"channel_id=eq."+chId},async p=>{
-      const m=p.new;
-      if(shownIds.has(m.id)||localSent.has(m.id))return; // Пропускаем дубли
-      shownIds.add(m.id);
-      if(!pCache[m.sender_id])await fetchProfiles([m.sender_id]);
-      S.ui.appendMessage(m,pCache)
-    }).subscribe()
+    try {
+      const{data:msgs, error}=await sb.from("messages").select("*").eq("channel_id",chId).order("created_at",{ascending:true}).limit(100);
+      if (error) throw error;
+      const ids=[...new Set((msgs||[]).map(m=>m.sender_id))];await fetchProfiles(ids);
+      const ct=document.getElementById("chat-messages");if(!ct)return;
+      ct.innerHTML="";if(!msgs||!msgs.length)ct.innerHTML='<div class="empty-state"><h3>Пока нет сообщений</h3><p>Будьте первым!</p></div>';
+      else msgs.forEach(m=>{shownIds.add(m.id);S.ui.appendMessage(m,pCache)});ct.scrollTop=ct.scrollHeight;
+      sub=sb.channel("msgs-"+chId).on("postgres_changes",{event:"INSERT",schema:"public",table:"messages",filter:"channel_id=eq."+chId},async p=>{
+        const m=p.new;
+        if(shownIds.has(m.id)||localSent.has(m.id))return;
+        shownIds.add(m.id);
+        if(!pCache[m.sender_id])await fetchProfiles([m.sender_id]);
+        S.ui.appendMessage(m,pCache)
+      }).subscribe()
+    } catch (e) {
+      console.error("loadMessages failed:", e.message);
+    }
   }
 
   function unsub(){if(sub){sb.removeChannel(sub);sub=null}}
@@ -68,18 +73,23 @@
 
   async function loadDMs(friendId){
     curCh=friendId;unsub();S.ui.resetCompact();shownIds.clear();localSent.clear();
-    const{data:msgs}=await sb.from("direct_messages").select("*").or(`and(sender_id.eq.${S.user.id},receiver_id.eq.${friendId}),and(sender_id.eq.${friendId},receiver_id.eq.${S.user.id})`).order("created_at",{ascending:true}).limit(100);
-    const ids=[...new Set((msgs||[]).map(m=>m.sender_id))];await fetchProfiles(ids);
-    const ct=document.getElementById("chat-messages");if(!ct)return;
-    ct.innerHTML="";if(!msgs||!msgs.length)ct.innerHTML='<div class="empty-state"><h3>Начните общение!</h3></div>';
-    else msgs.forEach(m=>{shownIds.add(m.id);S.ui.appendMessage(m,pCache)});ct.scrollTop=ct.scrollHeight;
-    sub=sb.channel("dms-"+friendId).on("postgres_changes",{event:"INSERT",schema:"public",table:"direct_messages",filter:"sender_id=eq."+friendId},async p=>{
-      const m=p.new;
-      if(shownIds.has(m.id)||localSent.has(m.id))return; // Пропускаем дубли
-      shownIds.add(m.id);
-      if(!pCache[m.sender_id])await fetchProfiles([m.sender_id]);
-      S.ui.appendMessage(m,pCache)
-    }).subscribe()
+    try {
+      const{data:msgs, error}=await sb.from("direct_messages").select("*").or(`and(sender_id.eq.${S.user.id},receiver_id.eq.${friendId}),and(sender_id.eq.${friendId},receiver_id.eq.${S.user.id})`).order("created_at",{ascending:true}).limit(100);
+      if (error) throw error;
+      const ids=[...new Set((msgs||[]).map(m=>m.sender_id))];await fetchProfiles(ids);
+      const ct=document.getElementById("chat-messages");if(!ct)return;
+      ct.innerHTML="";if(!msgs||!msgs.length)ct.innerHTML='<div class="empty-state"><h3>Начните общение!</h3></div>';
+      else msgs.forEach(m=>{shownIds.add(m.id);S.ui.appendMessage(m,pCache)});ct.scrollTop=ct.scrollHeight;
+      sub=sb.channel("dms-"+friendId).on("postgres_changes",{event:"INSERT",schema:"public",table:"direct_messages",filter:"sender_id=eq."+friendId},async p=>{
+        const m=p.new;
+        if(shownIds.has(m.id)||localSent.has(m.id))return;
+        shownIds.add(m.id);
+        if(!pCache[m.sender_id])await fetchProfiles([m.sender_id]);
+        S.ui.appendMessage(m,pCache)
+      }).subscribe()
+    } catch (e) {
+      console.error("loadDMs failed:", e.message);
+    }
   }
 
   async function sendDM(receiverId,content){
