@@ -36,5 +36,5 @@
     }, duration);
   }
 
-  S.toast = showToast;
+  window.toast = showToast;
 })();

@@ -158,11 +158,11 @@
     try {
       const{error}=await sb.auth.updateUser({password:npw});
       if(error) throw error;
-      S.toast("Пароль изменён!","success");
+      toast("Пароль изменён!","success");
       return{error:null}
     } catch (e) {
       console.error("changePassword failed:", e.message);
-      S.toast("Ошибка смены пароля: " + e.message,"error");
+      toast("Ошибка смены пароля: " + e.message,"error");
       return {error: e.message};
     }
   }

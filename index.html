@@ -35,7 +35,13 @@
         S.ui.showAuth();
       }
       const ok=await S.auth.initSession();
-      if(ok){S.appLoaded=true;await S.auth.setOnlineStatus("online");S.ui.showApp()}
+      if(ok){
+        S.appLoaded=true;
+        await S.auth.setOnlineStatus("online");
+        if (S.ui) {
+          S.ui.showApp();
+        }
+      }
       window.addEventListener("beforeunload",(e)=>{
         if(!S.appLoaded) return;
         if(e) e.preventDefault();

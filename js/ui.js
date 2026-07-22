@@ -86,7 +86,7 @@
   function bindChatInput(channel,isDM){
     const ta=document.getElementById("msg-input"),sb=document.getElementById("send-msg-btn");if(!ta)return;
     ta.addEventListener("input",()=>{ta.style.height="auto";ta.style.height=Math.min(ta.scrollHeight,120)+"px"});
-    const send=async()=>{const c=ta.value.trim();if(!c)return;ta.disabled=true;let err;if(isDM)err=(await S.chat.sendDM(channel.receiver_id,c)).error;else err=(await S.chat.sendMessage(channel.id,c)).error;if(err){S.toast("Ошибка: "+err.message,"error");ta.disabled=false}else{ta.value="";ta.style.height="auto";ta.disabled=false;ta.focus()}};
+    const send=async()=>{const c=ta.value.trim();if(!c)return;ta.disabled=true;let err;if(isDM)err=(await S.chat.sendDM(channel.receiver_id,c)).error;else err=(await S.chat.sendMessage(channel.id,c)).error;if(err){toast("Ошибка: "+err.message,"error");ta.disabled=false}else{ta.value="";ta.style.height="auto";ta.disabled=false;ta.focus()}};
     ta.addEventListener("keydown",e=>{if(e.key==="Enter"&&!e.shiftKey){e.preventDefault();send()}});sb.addEventListener("click",send)
   }
   let _lastAuthor=null;
