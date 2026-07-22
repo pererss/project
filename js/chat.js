@@ -14,13 +14,23 @@
       const ct=document.getElementById("chat-messages");if(!ct)return;
       ct.innerHTML="";if(!msgs||!msgs.length)ct.innerHTML='<div class="empty-state"><h3>Пока нет сообщений</h3><p>Будьте первым!</p></div>';
       else msgs.forEach(m=>{shownIds.add(m.id);S.ui.appendMessage(m,pCache)});ct.scrollTop=ct.scrollHeight;
-      sub=sb.channel("msgs-"+chId).on("postgres_changes",{event:"INSERT",schema:"public",table:"messages",filter:"channel_id=eq."+chId},async p=>{
-        const m=p.new;
-        if(shownIds.has(m.id)||localSent.has(m.id))return;
+      const channel = sb.channel("msgs-" + chId);
+      channel.on("postgres_changes", { event: "INSERT", schema: "public", table: "messages", filter: "channel_id=eq." + chId }, async p => {
+        const m = p.new;
+        if (shownIds.has(m.id) || localSent.has(m.id)) return;
         shownIds.add(m.id);
-        if(!pCache[m.sender_id])await fetchProfiles([m.sender_id]);
-        S.ui.appendMessage(m,pCache)
-      }).subscribe()
+        if (!pCache[m.sender_id]) await fetchProfiles([m.sender_id]);
+        S.ui.appendMessage(m, pCache);
+      });
+      sub = channel.subscribe(async (status, err) => {
+        if (status === 'SUBSCRIBED') {
+          console.log(`Successfully subscribed to channel: msgs-${chId}`);
+        } else if (status === 'TIMED_OUT') {
+          console.error(`Timed out subscribing to channel: msgs-${chId}`);
+        } else if (status === 'CHANNEL_ERROR') {
+          console.error(`Error on channel: msgs-${chId}`, err);
+        }
+      });
     } catch (e) {
       console.error("loadMessages failed:", e.message);
     }
@@ -118,13 +128,23 @@
       const ct=document.getElementById("chat-messages");if(!ct)return;
       ct.innerHTML="";if(!msgs||!msgs.length)ct.innerHTML='<div class="empty-state"><h3>Начните общение!</h3></div>';
       else msgs.forEach(m=>{shownIds.add(m.id);S.ui.appendMessage(m,pCache)});ct.scrollTop=ct.scrollHeight;
-      sub=sb.channel(`dms-${S.user.id}-${friendId}`).on("postgres_changes",{event:"INSERT",schema:"public",table:"direct_messages",filter:`or(and(sender_id.eq.${S.user.id},receiver_id.eq.${friendId}),and(sender_id.eq.${friendId},receiver_id.eq.${S.user.id}))`},async p=>{
-        const m=p.new;
-        if(shownIds.has(m.id)||localSent.has(m.id))return;
+      const channel = sb.channel(`dms-${S.user.id}-${friendId}`);
+      channel.on("postgres_changes", { event: "INSERT", schema: "public", table: "direct_messages", filter: `or(and(sender_id.eq.${S.user.id},receiver_id.eq.${friendId}),and(sender_id.eq.${friendId},receiver_id.eq.${S.user.id}))` }, async p => {
+        const m = p.new;
+        if (shownIds.has(m.id) || localSent.has(m.id)) return;
         shownIds.add(m.id);
-        if(!pCache[m.sender_id])await fetchProfiles([m.sender_id]);
-        S.ui.appendMessage(m,pCache)
-      }).subscribe()
+        if (!pCache[m.sender_id]) await fetchProfiles([m.sender_id]);
+        S.ui.appendMessage(m, pCache);
+      });
+      sub = channel.subscribe(async (status, err) => {
+        if (status === 'SUBSCRIBED') {
+          console.log(`Successfully subscribed to DM channel: dms-${S.user.id}-${friendId}`);
+        } else if (status === 'TIMED_OUT') {
+          console.error(`Timed out subscribing to DM channel: dms-${S.user.id}-${friendId}`);
+        } else if (status === 'CHANNEL_ERROR') {
+          console.error(`Error on DM channel: dms-${S.user.id}-${friendId}`, err);
+        }
+      });
     } catch (e) {
       console.error("loadDMs failed:", e.message);
     }
