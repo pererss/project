@@ -1,4 +1,4 @@
-// SENTCOR Connection Manager v1.0
+// SENTCOR Connection Manager v1.1
 (function() {
     "use strict";
 
@@ -6,41 +6,66 @@
     const S = window.SENTCOR;
 
     let heartbeatInterval = null;
-    const HEARTBEAT_INTERVAL_MS = 30000; // 30 seconds
+    const HEARTBEAT_INTERVAL_MS = 30000;
+    let currentRealtimeStatus = 'disconnected';
+    let mainChannel = null;
 
-    /**
-     * Checks the status of the Supabase Realtime connection and attempts to reconnect if necessary.
-     */
+    function subscribeToChannel() {
+        if (!S.sb || !S.user) return;
+        
+        const channelName = `realtime:user:${S.user.id}`;
+        mainChannel = S.sb.channel(channelName, {
+            config: {
+                broadcast: {
+                    self: true,
+                },
+            },
+        });
+
+        mainChannel.on('postgres_changes', { event: '*', schema: 'public' }, payload => {
+            // This is where you'd handle incoming realtime messages
+            // For now, we just use it to monitor connection status
+            console.log('Realtime event received:', payload);
+        });
+
+        mainChannel.subscribe((status, err) => {
+            currentRealtimeStatus = status;
+            console.log(`ConnectionManager: Realtime subscription status is [${status}]`);
+
+            if (status === 'SUBSCRIBED') {
+                S.toast.show("Соединение установлено", "success", 3000);
+                startHeartbeat();
+            } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
+                console.error(`ConnectionManager: Subscription failed with status [${status}]`, err);
+                S.toast.show("Ошибка подключения к Realtime", "error", 5000);
+                stopHeartbeat();
+            } else if (status === 'CLOSED') {
+                console.warn("ConnectionManager: Realtime channel closed.");
+                stopHeartbeat();
+            }
+        });
+    }
+
     function checkConnection() {
-        if (!S.sb || !S.sb.realtime) {
-            console.warn("ConnectionManager: Supabase client not available yet.");
-            return;
-        }
+        console.log(`ConnectionManager: Heartbeat - Current status is [${currentRealtimeStatus}]`);
 
-        const status = S.sb.realtime.status;
-        console.log(`ConnectionManager: Heartbeat - Realtime status is [${status}]`);
-
-        if (status !== 'connected') {
-            console.warn(`ConnectionManager: Realtime disconnected. Attempting to reconnect...`);
+        if (currentRealtimeStatus !== 'SUBSCRIBED') {
+            console.warn(`ConnectionManager: Realtime not subscribed. Attempting to re-subscribe...`);
             S.toast.show("Восстанавливаем соединение...", "warning", 2000);
-            S.sb.realtime.connect();
+            if (mainChannel) {
+                mainChannel.subscribe(); // Attempt to re-subscribe
+            } else {
+                subscribeToChannel(); // Or create a new subscription
+            }
         }
     }
 
-    /**
-     * Starts the WebSocket heartbeat to ensure the connection remains active.
-     */
     function startHeartbeat() {
-        if (heartbeatInterval) {
-            clearInterval(heartbeatInterval);
-        }
+        if (heartbeatInterval) clearInterval(heartbeatInterval);
         console.log(`ConnectionManager: Starting heartbeat every ${HEARTBEAT_INTERVAL_MS / 1000} seconds.`);
         heartbeatInterval = setInterval(checkConnection, HEARTBEAT_INTERVAL_MS);
     }
 
-    /**
-     * Stops the WebSocket heartbeat.
-     */
     function stopHeartbeat() {
         if (heartbeatInterval) {
             console.log("ConnectionManager: Stopping heartbeat.");
@@ -49,49 +74,43 @@
         }
     }
 
-    /**
-     * Handles browser visibility changes to optimize connection management.
-     */
     function handleVisibilityChange() {
         if (document.visibilityState === 'visible') {
             console.log("ConnectionManager: Tab is visible again. Checking connection.");
-            // Give Supabase a moment to auto-reconnect, then check forcefully.
-            setTimeout(checkConnection, 2000); 
-            startHeartbeat();
+            // Don't call auth logic, just check the connection status.
+            setTimeout(checkConnection, 1000);
         } else {
-            console.log("ConnectionManager: Tab is hidden. Pausing heartbeat.");
-            stopHeartbeat();
+            console.log("ConnectionManager: Tab is hidden. Heartbeat will continue but checks will be less frequent if browser throttles timers.");
         }
     }
-    
-    /**
-     * Handles browser online/offline status changes.
-     */
+
     function handleOnlineStatus() {
         if (navigator.onLine) {
             console.log("ConnectionManager: Browser is back online. Checking connection.");
-            S.toast.show("Соединение восстановлено", "success", 3000);
+            S.toast.show("Соединение с интернетом восстановлено", "success", 3000);
             setTimeout(checkConnection, 1000);
-            startHeartbeat();
         } else {
             console.error("ConnectionManager: Browser is offline. Realtime connection will be lost.");
             S.toast.show("Отсутствует подключение к сети", "error", 10000);
+            currentRealtimeStatus = 'disconnected'; // Manually set status
             stopHeartbeat();
         }
     }
 
-
-    /**
-     * Initializes the connection manager and sets up all event listeners.
-     */
     function init() {
         console.log("ConnectionManager: Initializing...");
-        document.addEventListener('visibilitychange', handleVisibilityChange);
-        window.addEventListener('online', handleOnlineStatus);
-        window.addEventListener('offline', handleOnlineStatus);
         
-        startHeartbeat();
-        console.log("ConnectionManager: Initialized.");
+        // Wait for user to be available
+        const waitForUser = setInterval(() => {
+            if (S.user) {
+                clearInterval(waitForUser);
+                subscribeToChannel();
+                document.addEventListener('visibilitychange', handleVisibilityChange);
+                window.addEventListener('online', handleOnlineStatus);
+                window.addEventListener('offline', handleOnlineStatus);
+                console.log("ConnectionManager: Initialized for user.");
+            }
+        }, 100);
     }
 
     S.connection = {
