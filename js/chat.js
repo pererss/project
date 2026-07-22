@@ -1,337 +1,188 @@
-// SENTCOR v11 — Resilient Realtime & Optimistic UI
-(function(){
-  const S=window.SENTCOR,sb=S.sb;
-  let currentChannelId=null, currentSubscription=null, profileCache={};
-  const shownMessageIds=new Set();
-  const optimisticMessageIds=new Set(); // Track IDs of messages sent optimistically
+// SENTCOR v12 — High-Performance Chat Core
+(function() {
+    "use strict";
 
-  /**
-   * Unsubscribes from the current channel to prevent duplicate listeners.
-   */
-  function unsubscribeFromChannel(){
-    if(currentSubscription){
-      sb.removeChannel(currentSubscription);
-      currentSubscription=null;
+    const S = window.SENTCOR;
+    const sb = S.sb;
+
+    let currentChannelId = null;
+    let currentSubscription = null;
+    let profileCache = {};
+    const shownMessageIds = new Set();
+    const optimisticMessageIds = new Set();
+
+    function unsubscribeFromChannel() {
+        if (currentSubscription) {
+            sb.removeChannel(currentSubscription);
+            currentSubscription = null;
+            console.log("Unsubscribed from channel.");
+        }
     }
-  }
 
-  /**
-   * Fetches user profiles by IDs and caches them.
-   * @param {string[]} ids - Array of user UUIDs.
-   */
-  async function fetchProfiles(ids){
-    if (!ids || ids.length === 0) return;
-    const missingIds=ids.filter(id=>!profileCache[id]);
-    if(missingIds.length === 0) return;
-    
-    const{data,error}=await sb.from("profiles").select("id,username,display_name,avatar_url,status,custom_status").in("id",missingIds);
-    if(error) {
-      console.error("Failed to fetch profiles:", error);
-      return;
+    async function fetchProfiles(ids) {
+        const missingIds = [...new Set(ids.filter(id => id && !profileCache[id]))];
+        if (missingIds.length === 0) return;
+
+        try {
+            const { data, error } = await sb.from("profiles").select("id,username,display_name,avatar_url,status").in("id", missingIds);
+            if (error) throw error;
+            (data || []).forEach(p => profileCache[p.id] = p);
+        } catch (error) {
+            console.error("Failed to fetch profiles:", error);
+        }
     }
-    (data||[]).forEach(p=>profileCache[p.id]=p);
-  }
 
-  /**
-   * Handles incoming new messages from Supabase Realtime.
-   * @param {object} payload - The new message data from the event.
-   */
-  async function handleNewMessagePayload(payload){
-    const newMessage=payload.new;
-    // If we've already shown this message (e.g., optimistically), ignore it.
-    if (shownMessageIds.has(newMessage.id) || optimisticMessageIds.has(newMessage.id)) return;
-    
-    shownMessageIds.add(newMessage.id);
-    if (!profileCache[newMessage.sender_id]) {
-      await fetchProfiles([newMessage.sender_id]);
-    }
-    S.ui.appendMessage(newMessage, profileCache);
-  }
-
-  /**
-   * Loads messages for a channel and subscribes to future updates.
-   * @param {string} channelId - The ID of the channel to load.
-   */
-  async function loadMessages(channelId){
-    if (currentChannelId === channelId) return; // Avoid reloading the same channel
-    currentChannelId=channelId;
-    
-    unsubscribeFromChannel();
-    S.ui.resetCompact();
-    shownMessageIds.clear();
-    optimisticMessageIds.clear();
-
-    try {
-      const chatContainer=document.getElementById("chat-messages");
-      if(!chatContainer) return;
-      chatContainer.innerHTML = '<div class="loading-spinner"></div>'; // Show loading state
-
-      const{data:messages, error}=await sb.from("messages").select("*").eq("channel_id",channelId).order("created_at",{ascending:true}).limit(100);
-      if (error) throw error;
-
-      const userIds=[...new Set((messages||[]).map(m=>m.sender_id))];
-      await fetchProfiles(userIds);
-      
-      chatContainer.innerHTML="";
-      if(!messages||!messages.length){
-        chatContainer.innerHTML='<div class="empty-state"><h3>Пока нет сообщений</h3><p>Будьте первым!</p></div>';
-      } else {
-        messages.forEach(m=>{
-          shownMessageIds.add(m.id);
-          S.ui.appendMessage(m,profileCache);
+    function handleNewMessagePayload(payload, isDM = false) {
+        const newMessage = payload.new;
+        if (shownMessageIds.has(newMessage.id) || optimisticMessageIds.has(newMessage.id)) {
+            return;
+        }
+        
+        shownMessageIds.add(newMessage.id);
+        
+        fetchProfiles([newMessage.sender_id]).then(() => {
+            S.ui.appendMessage(newMessage, profileCache, isDM);
         });
-      }
-      chatContainer.scrollTop=chatContainer.scrollHeight;
-
-      // Correctly chain .on() before .subscribe()
-      currentSubscription = sb.channel(`msgs-${channelId}`)
-        .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages', filter: `channel_id=eq.${channelId}` }, handleNewMessagePayload)
-        .subscribe((status, err) => {
-          if (status === 'SUBSCRIBED') {
-            console.log(`Successfully subscribed to channel: msgs-${channelId}`);
-          } else if (err) {
-            console.error(`Subscription error on channel msgs-${channelId}:`, err.message);
-            window.toast.show(`Ошибка подписки на чат: ${err.message}`, 'error');
-          }
-        });
-
-    } catch (e) {
-      console.error("loadMessages failed:", e.message);
-      window.toast.show(`Не удалось загрузить сообщения: ${e.message}`, 'error');
-      const ct=document.getElementById("chat-messages");
-      if(ct) ct.innerHTML = '<div class="empty-state error"><h3>Ошибка загрузки</h3><p>Не удалось загрузить историю сообщений. Попробуйте еще раз.</p></div>';
     }
-  }
 
-  /**
-   * Sends a message to a channel with optimistic UI updates.
-   * @param {string} channelId - The ID of the channel.
-   * @param {string} content - The message text.
-   */
-  async function sendMessage(channelId,content){
-    if(!S.user||!channelId||!content) return {error:"Missing data"};
-    
-    const trimmedContent=content.trim().slice(0,S.SENTCOR_CONFIG.MAX_MESSAGE_LENGTH);
-    if(!trimmedContent) return;
+    async function loadChat(id, isDM = false) {
+        if (currentChannelId === id) return;
+        currentChannelId = id;
+        S.chat.currentChannelInfo = { id, isDM };
 
-    const optimisticId=crypto.randomUUID();
-    optimisticMessageIds.add(optimisticId);
+        unsubscribeFromChannel();
+        S.ui.resetCompact();
+        shownMessageIds.clear();
+        optimisticMessageIds.clear();
 
-    // 1. Optimistic UI update
-    const optimisticMsg={
-      id: optimisticId,
-      channel_id: channelId,
-      sender_id: S.user.id,
-      content: trimmedContent,
-      created_at: new Date().toISOString(),
-      sending: true // Custom flag for UI to show a 'sending' state
-    };
-
-    if(!profileCache[S.user.id]) await fetchProfiles([S.user.id]);
-    S.ui.appendMessage(optimisticMsg, profileCache);
-    
-    try {
-      // 2. Send to server
-      const{data:sentMessage,error}=await sb.from("messages").insert({
-        channel_id: channelId,
-        sender_id: S.user.id,
-        content: trimmedContent
-      }).select().single();
-      
-      if(error) throw error;
-
-      // 3. Update UI on success
-      const msgElement = document.getElementById(`msg-${optimisticId}`);
-      if (msgElement) {
-          msgElement.id = `msg-${sentMessage.id}`; // Switch to the real ID
-          msgElement.classList.remove('sending');
-          const statusEl = msgElement.querySelector('.message-status-sending');
-          if(statusEl) statusEl.remove();
-      }
-      shownMessageIds.add(sentMessage.id); // Add real ID to shown set
-      optimisticMessageIds.delete(optimisticId); // Clean up optimistic tracking
-
-      return {data: sentMessage, error: null};
-
-    } catch (error) {
-      // 4. Update UI on failure
-      console.error("Failed to send message:", error.message);
-      const errorMsgEl = document.getElementById(`msg-${optimisticId}`);
-      if (errorMsgEl) {
-          errorMsgEl.classList.add("error");
-          errorMsgEl.classList.remove("sending");
-          
-          const statusSendingEl = errorMsgEl.querySelector('.message-status-sending');
-          if(statusSendingEl) statusSendingEl.remove();
-          
-          let statusContainer = errorMsgEl.querySelector('.message-status');
-          if (!statusContainer) {
-              statusContainer = document.createElement('div');
-              statusContainer.className = 'message-status';
-              errorMsgEl.querySelector('.message-body').appendChild(statusContainer);
-          }
-          statusContainer.innerHTML += ` <span class="message-status-error" title="${S.escapeHtml(error.message)}"><i class="fa-solid fa-circle-exclamation"></i></span>`;
-          
-          const contentContainer = errorMsgEl.querySelector('.message-content');
-          // Add retry button only if it doesn't exist
-          if (!contentContainer.querySelector('.retry-send-btn')) {
-            contentContainer.innerHTML += ` <button class="btn btn-sm btn-danger retry-send-btn">Повторить</button>`;
-            const retryBtn = contentContainer.querySelector('.retry-send-btn');
-            retryBtn.addEventListener('click', (e) => {
-                e.stopPropagation();
-                errorMsgEl.remove();
-                sendMessage(channelId, trimmedContent); // Retry sending
-            });
-          }
-      }
-      optimisticMessageIds.delete(optimisticId);
-      return {error};
-    }
-  }
-
-  async function loadDMs(friendId) {
-    if (currentChannelId === friendId) return;
-    currentChannelId = friendId;
-    S.chat.currentChannelInfo = { id: friendId, isDM: true };
-
-    unsubscribeFromChannel();
-    S.ui.resetCompact();
-    shownMessageIds.clear();
-    optimisticMessageIds.clear();
-
-    try {
         const chatContainer = document.getElementById("chat-messages");
         if (!chatContainer) return;
         chatContainer.innerHTML = '<div class="loading-spinner"></div>';
 
-        const { data: messages, error } = await sb.from("direct_messages").select("*").or(`and(sender_id.eq.${S.user.id},receiver_id.eq.${friendId}),and(sender_id.eq.${friendId},receiver_id.eq.${S.user.id})`).order("created_at", { ascending: true }).limit(100);
-        if (error) throw error;
+        try {
+            const tableName = isDM ? "direct_messages" : "messages";
+            let query = sb.from(tableName).select("*");
 
-        const userIds = [...new Set((messages || []).map(m => m.sender_id))];
-        if (!userIds.includes(S.user.id)) userIds.push(S.user.id);
-        if (!userIds.includes(friendId)) userIds.push(friendId);
-        await fetchProfiles(userIds);
-
-        chatContainer.innerHTML = "";
-        if (!messages || !messages.length) {
-            chatContainer.innerHTML = '<div class="empty-state"><h3>Начните общение!</h3><p>Это начало вашей переписки.</p></div>';
-        } else {
-            messages.forEach(m => {
-                shownMessageIds.add(m.id);
-                S.ui.appendMessage(m, profileCache, true);
-            });
-        }
-        chatContainer.scrollTop = chatContainer.scrollHeight;
-
-        const dmChannelName = `dm-${[S.user.id, friendId].sort().join('-')}`;
-        currentSubscription = sb.channel(dmChannelName)
-            .on('postgres_changes', {
-                event: 'INSERT',
-                schema: 'public',
-                table: 'direct_messages',
-                filter: `or(and(sender_id.eq.${S.user.id},receiver_id.eq.${friendId}),and(sender_id.eq.${friendId},receiver_id.eq.${S.user.id}))`
-            }, (payload) => handleNewMessagePayload(payload, true))
-            .subscribe((status, err) => {
-                if (status === 'SUBSCRIBED') {
-                    console.log(`Successfully subscribed to DM channel: ${dmChannelName}`);
-                } else if (err) {
-                    console.error(`Subscription error on DM channel ${dmChannelName}:`, err.message);
-                    window.toast.show(`Ошибка подписки на ЛС: ${err.message}`, 'error');
-                }
-            });
-
-    } catch (e) {
-        console.error("loadDMs failed:", e.message);
-        window.toast.show(`Не удалось загрузить ЛС: ${e.message}`, 'error');
-        const ct = document.getElementById("chat-messages");
-        if (ct) ct.innerHTML = '<div class="empty-state error"><h3>Ошибка загрузки</h3><p>Не удалось загрузить историю переписки.</p></div>';
-    }
-  }
-
-  async function sendDM(receiverId, content) {
-    if (!S.user || !receiverId || !content) return { error: "Missing data" };
-
-    const trimmedContent = content.trim().slice(0, S.SENTCOR_CONFIG.MAX_MESSAGE_LENGTH);
-    if (!trimmedContent) return;
-
-    const optimisticId = crypto.randomUUID();
-    optimisticMessageIds.add(optimisticId);
-
-    const optimisticMsg = {
-        id: optimisticId,
-        receiver_id: receiverId,
-        sender_id: S.user.id,
-        content: trimmedContent,
-        created_at: new Date().toISOString(),
-        sending: true
-    };
-
-    if (!profileCache[S.user.id]) await fetchProfiles([S.user.id]);
-    S.ui.appendMessage(optimisticMsg, profileCache, true);
-
-    try {
-        const { data: sentMessage, error } = await sb.from("direct_messages").insert({
-            sender_id: S.user.id,
-            receiver_id: receiverId,
-            content: trimmedContent
-        }).select().single();
-
-        if (error) throw error;
-
-        const msgElement = document.getElementById(`msg-${optimisticId}`);
-        if (msgElement) {
-            msgElement.id = `msg-${sentMessage.id}`;
-            msgElement.classList.remove('sending');
-            const statusEl = msgElement.querySelector('.message-status-sending');
-            if (statusEl) statusEl.remove();
-        }
-        shownMessageIds.add(sentMessage.id);
-        optimisticMessageIds.delete(optimisticId);
-
-        return { data: sentMessage, error: null };
-
-    } catch (error) {
-        console.error("Failed to send DM:", error.message);
-        const errorMsgEl = document.getElementById(`msg-${optimisticId}`);
-        if (errorMsgEl) {
-            errorMsgEl.classList.add("error");
-            errorMsgEl.classList.remove("sending");
-
-            const statusSendingEl = errorMsgEl.querySelector('.message-status-sending');
-            if (statusSendingEl) statusSendingEl.remove();
-
-            let statusContainer = errorMsgEl.querySelector('.message-status');
-            if (!statusContainer) {
-                statusContainer = document.createElement('div');
-                statusContainer.className = 'message-status';
-                errorMsgEl.querySelector('.message-body').appendChild(statusContainer);
+            if (isDM) {
+                query = query.or(`and(sender_id.eq.${S.user.id},receiver_id.eq.${id}),and(sender_id.eq.${id},receiver_id.eq.${S.user.id})`);
+            } else {
+                query = query.eq("channel_id", id);
             }
-            statusContainer.innerHTML += ` <span class="message-status-error" title="${S.escapeHtml(error.message)}"><i class="fa-solid fa-circle-exclamation"></i></span>`;
+            
+            const { data: messages, error } = await query.order("created_at", { ascending: true }).limit(100);
+            if (error) throw error;
 
-            const contentContainer = errorMsgEl.querySelector('.message-content');
-            if (!contentContainer.querySelector('.retry-send-btn')) {
-                contentContainer.innerHTML += ` <button class="btn btn-sm btn-danger retry-send-btn">Повторить</button>`;
-                const retryBtn = contentContainer.querySelector('.retry-send-btn');
-                retryBtn.addEventListener('click', (e) => {
-                    e.stopPropagation();
-                    errorMsgEl.remove();
-                    sendDM(receiverId, trimmedContent);
+            const userIds = (messages || []).map(m => m.sender_id);
+            if (isDM) userIds.push(id);
+            await fetchProfiles(userIds);
+
+            chatContainer.innerHTML = "";
+            
+            // Use DocumentFragment for performance
+            const fragment = document.createDocumentFragment();
+            if (!messages || messages.length === 0) {
+                const emptyState = document.createElement('div');
+                emptyState.className = 'empty-state';
+                emptyState.innerHTML = `<h3>${isDM ? 'Начните общение!' : 'Пока нет сообщений'}</h3><p>${isDM ? 'Это начало вашей переписки.' : 'Будьте первым!'}</p>`;
+                fragment.appendChild(emptyState);
+            } else {
+                messages.forEach(m => {
+                    shownMessageIds.add(m.id);
+                    // S.ui.appendMessage will now return a DOM element
+                    fragment.appendChild(S.ui.createMessageElement(m, profileCache, isDM));
                 });
             }
-        }
-        optimisticMessageIds.delete(optimisticId);
-        return { error };
-    }
-  }
+            chatContainer.appendChild(fragment);
+            chatContainer.scrollTop = chatContainer.scrollHeight;
 
-  S.chat={
-    loadMessages,
-    sendMessage,
-    loadDMs,
-    sendDM,
-    unsub: unsubscribeFromChannel, // Renamed for clarity
-    fetchProfiles,
-    pCache: profileCache, 
-    currentChannelInfo: {id: null, isDM: false}
-  };
+            // Subscribe to new messages
+            const channelName = isDM ? `dm-${[S.user.id, id].sort().join('-')}` : `msgs-${id}`;
+            const table = isDM ? 'direct_messages' : 'messages';
+            const filter = isDM 
+                ? `or(and(sender_id.eq.${S.user.id},receiver_id.eq.${id}),and(sender_id.eq.${id},receiver_id.eq.${S.user.id}))`
+                : `channel_id=eq.${id}`;
+
+            currentSubscription = sb.channel(channelName)
+                .on('postgres_changes', { event: 'INSERT', schema: 'public', table, filter }, (payload) => handleNewMessagePayload(payload, isDM))
+                .subscribe((status, err) => {
+                    if (status === 'SUBSCRIBED') {
+                        console.log(`Successfully subscribed to ${channelName}`);
+                    } else if (err) {
+                        console.error(`Subscription error on ${channelName}:`, err.message);
+                        S.toast.show(`Ошибка подписки на чат: ${err.message}`, 'error');
+                    }
+                });
+
+        } catch (e) {
+            console.error(`loadChat failed for ${isDM ? 'DM' : 'channel'} ${id}:`, e.message);
+            S.toast.show(`Не удалось загрузить чат: ${e.message}`, 'error');
+            chatContainer.innerHTML = '<div class="empty-state error"><h3>Ошибка загрузки</h3><p>Не удалось загрузить историю сообщений.</p></div>';
+        }
+    }
+
+    async function sendMessage(content) {
+        const { id: targetId, isDM } = S.chat.currentChannelInfo;
+        if (!S.user || !targetId || !content) return { error: "Missing data" };
+
+        const trimmedContent = content.trim().slice(0, S.SENTCOR_CONFIG.MAX_MESSAGE_LENGTH);
+        if (!trimmedContent) return;
+
+        const optimisticId = crypto.randomUUID();
+        optimisticMessageIds.add(optimisticId);
+
+        const optimisticMsg = {
+            id: optimisticId,
+            sender_id: S.user.id,
+            content: trimmedContent,
+            created_at: new Date().toISOString(),
+            sending: true
+        };
+        
+        if (isDM) {
+            optimisticMsg.receiver_id = targetId;
+        } else {
+            optimisticMsg.channel_id = targetId;
+        }
+
+        if (!profileCache[S.user.id]) await fetchProfiles([S.user.id]);
+        S.ui.appendMessage(optimisticMsg, profileCache, isDM);
+
+        try {
+            const tableName = isDM ? "direct_messages" : "messages";
+            const insertData = {
+                sender_id: S.user.id,
+                content: trimmedContent
+            };
+            if (isDM) {
+                insertData.receiver_id = targetId;
+            } else {
+                insertData.channel_id = targetId;
+            }
+
+            const { data: sentMessage, error } = await sb.from(tableName).insert(insertData).select().single();
+            if (error) throw error;
+
+            S.ui.updateMessageStatus(optimisticId, sentMessage.id, 'sent');
+            shownMessageIds.add(sentMessage.id);
+            optimisticMessageIds.delete(optimisticId);
+
+            return { data: sentMessage, error: null };
+
+        } catch (error) {
+            console.error("Failed to send message:", error.message);
+            S.ui.updateMessageStatus(optimisticId, optimisticId, 'error', error.message);
+            optimisticMessageIds.delete(optimisticId);
+            return { error };
+        }
+    }
+
+    S.chat = {
+        loadMessages: (channelId) => loadChat(channelId, false),
+        loadDMs: (friendId) => loadChat(friendId, true),
+        sendMessage,
+        unsub: unsubscribeFromChannel,
+        fetchProfiles,
+        pCache: profileCache,
+        currentChannelInfo: { id: null, isDM: false }
+    };
 })();

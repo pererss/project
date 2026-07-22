@@ -1,0 +1,183 @@
+/* SENTCOR Monochrome Theme v1.0 */
+/* --- Dark & Light High-Contrast Theme --- */
+
+:root {
+  --font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  
+  /* Base Colors (Dark Theme Default) */
+  --bg-primary: #0a0a0a;       /* Almost black for main backgrounds */
+  --bg-secondary: #141414;     /* Slightly lighter for panels, inputs */
+  --bg-tertiary: #1f1f1f;      /* Hover states, active elements */
+  --bg-quaternary: #2a2a2a;    /* Borders on hover */
+  
+  --text-primary: #f5f5f5;     /* Bright white for main text */
+  --text-secondary: #a3a3a3;   /* Grey for secondary text, timestamps */
+  --text-muted: #737373;       /* Muted grey for placeholders, disabled */
+  --text-inverted: #0a0a0a;    /* Text on accent backgrounds */
+  
+  --border-primary: #2a2a2a;   /* Main borders */
+  --border-secondary: #404040; /* Stronger borders */
+
+  --accent-primary: #ffffff;   /* White accent for buttons, highlights */
+  --accent-primary-hover: #e0e0e0; /* Hover for white accent */
+
+  --status-online: #22c55e;
+  --status-idle: #facc15;
+  --status-dnd: #ef4444;
+  --status-offline: #737373;
+
+  --danger: #ef4444;
+  --danger-hover: #dc2626;
+  --success: #22c55e;
+  --warning: #f97316;
+
+  /* UI Metrics */
+  --border-radius: 6px;
+  --transition-speed: 0.15s;
+}
+
+[data-theme="light"] {
+  --bg-primary: #ffffff;
+  --bg-secondary: #f5f5f5;
+  --bg-tertiary: #e5e5e5;
+  --bg-quaternary: #d4d4d4;
+  
+  --text-primary: #0a0a0a;
+  --text-secondary: #525252;
+  --text-muted: #a3a3a3;
+  --text-inverted: #ffffff;
+  
+  --border-primary: #e5e5e5;
+  --border-secondary: #d4d4d4;
+
+  --accent-primary: #0a0a0a;
+  --accent-primary-hover: #2a2a2a;
+}
+
+/* --- Base & Typography --- */
+body {
+  background-color: var(--bg-primary);
+  color: var(--text-primary);
+  font-family: var(--font-family);
+  font-size: 14px;
+  overflow: hidden;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* --- GPU Acceleration & Transitions --- */
+.sidebar, .sub-panel, .modal, .context-menu, .btn {
+  /* Promotes elements to their own compositor layer for smoother animations */
+  transform: translateZ(0);
+  will-change: transform, opacity;
+  transition: all var(--transition-speed) ease-in-out;
+}
+
+.sub-panel.collapsed {
+  transform: translateX(-100%);
+}
+
+/* --- Scrollbars --- */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--bg-tertiary);
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--border-secondary);
+}
+
+/* --- Buttons --- */
+.btn {
+  background-color: var(--bg-secondary);
+  color: var(--text-primary);
+  border: 1px solid var(--border-primary);
+}
+.btn:hover {
+  border-color: var(--border-secondary);
+  background-color: var(--bg-tertiary);
+}
+.btn-primary {
+  background-color: var(--accent-primary);
+  color: var(--text-inverted);
+  border-color: var(--accent-primary);
+}
+.btn-primary:hover {
+  background-color: var(--accent-primary-hover);
+  border-color: var(--accent-primary-hover);
+}
+.btn-danger {
+  background-color: var(--danger);
+  color: #fff;
+  border-color: var(--danger);
+}
+.btn-danger:hover {
+  background-color: var(--danger-hover);
+  border-color: var(--danger-hover);
+}
+.btn-ghost {
+  background: transparent;
+  border-color: transparent;
+}
+.btn-ghost:hover {
+  background-color: var(--bg-tertiary);
+}
+
+/* --- Inputs --- */
+.input {
+  background-color: var(--bg-secondary);
+  border: 1px solid var(--border-primary);
+  color: var(--text-primary);
+  border-radius: var(--border-radius);
+  padding: 9px 12px;
+}
+.input:focus {
+  border-color: var(--accent-primary);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent-primary) 20%, transparent);
+}
+
+/* --- Message Grouping & Compact Mode --- */
+.message {
+  display: flex;
+  padding: 2px 16px;
+  margin-top: 12px;
+}
+.message .avatar {
+  width: 36px;
+  height: 36px;
+  margin-right: 12px;
+  flex-shrink: 0;
+}
+.message.compact {
+  margin-top: 0;
+  padding-top: 0;
+  padding-bottom: 0;
+}
+/* In compact mode, we collapse the avatar space completely */
+.message.compact .avatar {
+  height: 0;
+  margin-top: -2px; /* Fine-tuning alignment */
+}
+.message.compact .message-body {
+  padding-left: 48px; /* 36px avatar + 12px margin */
+}
+.message.compact .message-header {
+  display: none;
+}
+.message-content {
+  line-height: 1.4;
+}
+.message-author {
+  font-weight: 600;
+}
+.message-time {
+  font-size: 11px;
+  color: var(--text-muted);
+  margin-left: 8px;
+}

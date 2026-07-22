@@ -1,28 +1,34 @@
 <!DOCTYPE html>
-<html lang="ru">
+<html lang="ru" data-theme="dark">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>SENTCOR — Игровой мессенджер</title>
   <meta name="description" content="SENTCOR — игровой мессенджер с голосовыми чатами, серверами и друзьями." />
   <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🎮</text></svg>" />
-  <link rel="stylesheet" href="css/style.css" />
-  <link rel="stylesheet" href="css/chat-fixes.css" />
+  
+  <!-- Main Monochrome Theme -->
+  <link rel="stylesheet" href="css/theme-monochrome.css" />
+
   <!-- Font Awesome 6 -->
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" />
-  <!-- Supabase JS SDK -->
+  
+  <!-- SDKs -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <!-- LiveKit Client SDK -->
   <script src="https://cdn.jsdelivr.net/npm/livekit-client@2/dist/livekit-client.umd.min.js"></script>
 </head>
 <body>
   <div id="app"></div>
 
+  <!-- Core Modules -->
   <script src="js/config.js"></script>
-  <script src="js/toast.js"></script>
   <script src="js/supabase.js"></script>
-  <script src="js/auth.js"></script>
+  <script src="js/connection.js"></script>
+  <script src="js/toast.js"></script>
   <script src="js/ui.js"></script>
+  <script src="js/auth.js"></script>
+  
+  <!-- Feature Modules -->
   <script src="js/servers.js"></script>
   <script src="js/chat.js"></script>
   <script src="js/friends.js"></script>
@@ -31,40 +37,40 @@
 
   <script>
     document.addEventListener('DOMContentLoaded', async function() {
-      // 1. Initialize core components first
-      window.SENTCOR.ui.init(); // Initialize UI elements
-      window.SENTCOR.toast.init(); // Initialize toast notifications
-
-      // 2. Show loading state in the UI
-      window.SENTCOR.ui.showAuth(); // Or a dedicated loading screen
+      // Phase 1: Core System Initialization (must not fail)
+      window.SENTCOR.toast.init();
+      window.SENTCOR.ui.init();
+      
+      // Show a neutral state, not the full auth screen yet
+      window.SENTCOR.ui.showLoadingScreen();
 
       try {
-        // 3. Attempt to initialize the user session
+        // Phase 2: Session & Connection
         const sessionInitialized = await window.SENTCOR.auth.initSession();
+        window.SENTCOR.connection.init(); // Start connection manager AFTER session is known
 
         if (sessionInitialized) {
-          // 4. If session is valid, load the main application
+          // Phase 3: Full App Load
           window.SENTCOR.appLoaded = true;
           await window.SENTCOR.auth.setOnlineStatus("online");
           window.SENTCOR.ui.showApp();
         } else {
-          // 5. If no session, the auth UI is already visible
-          console.log("No active session. Waiting for user to sign in.");
+          // If no session, show the auth screen
+          console.log("No active session. Displaying Auth UI.");
+          window.SENTCOR.ui.showAuth();
         }
       } catch (error) {
-        // 6. Critical error during initialization
-        console.error("Critical initialization error:", error);
-        window.SENTCOR.ui.showErrorState("Не удалось запустить приложение. Пожалуйста, попробуйте обновить страницу.");
+        // Phase 4: Critical Failure Handling
+        console.error("CRITICAL INITIALIZATION FAILURE:", error);
+        // Use a method that doesn't rely on the main app structure
+        window.SENTCOR.ui.showErrorState("Критическая ошибка. Не удалось запустить приложение. Попробуйте обновить страницу.");
       }
 
-      // 7. Add robust unload handling
-      window.addEventListener("beforeunload", (e) => {
+      // Unload handler
+      window.addEventListener("beforeunload", () => {
         if (!window.SENTCOR.appLoaded || !window.SENTCOR.user) return;
-        // Use sendBeacon for reliable background data transfer on unload
-        const url = `${window.SENTCOR_CONFIG.SUPABASE_URL}/rest/v1/profiles?id=eq.${window.SENTCOR.user.id}`;
-        const data = JSON.stringify({ status: "offline", last_login: new Date().toISOString() });
-        const blob = new Blob([data], { type: "application/json" });
-        navigator.sendBeacon(url, blob);
+        // This is a synchronous call, but it's the most reliable way on unload
+        window.SENTCOR.auth.setOnlineStatus("offline");
       });
     });
   </script>
