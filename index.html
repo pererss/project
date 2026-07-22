@@ -7,6 +7,7 @@
   <meta name="description" content="SENTCOR — игровой мессенджер с голосовыми чатами, серверами и друзьями." />
   <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🎮</text></svg>" />
   <link rel="stylesheet" href="css/style.css" />
+  <link rel="stylesheet" href="css/chat-fixes.css" />
   <!-- Font Awesome 6 -->
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" />
   <!-- Supabase JS SDK -->
@@ -29,7 +30,7 @@
   <script src="js/voice.js"></script>
 
   <script>
-    (async function(){
+    document.addEventListener('DOMContentLoaded', async function(){
       const S=window.SENTCOR;
       if (S.ui) {
         S.ui.showAuth();
@@ -51,7 +52,7 @@
         }
       });
       document.addEventListener("freeze",()=>{});
-    })();
+    });
   </script>
 </body>
 </html>

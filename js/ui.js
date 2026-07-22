@@ -84,21 +84,121 @@
     if(isDM)S.ui.renderFriendInfo(f)
   }
   function bindChatInput(channel,isDM){
-    const ta=document.getElementById("msg-input"),sb=document.getElementById("send-msg-btn");if(!ta)return;
-    ta.addEventListener("input",()=>{ta.style.height="auto";ta.style.height=Math.min(ta.scrollHeight,120)+"px"});
-    const send=async()=>{const c=ta.value.trim();if(!c)return;ta.disabled=true;let err;if(isDM)err=(await S.chat.sendDM(channel.receiver_id,c)).error;else err=(await S.chat.sendMessage(channel.id,c)).error;if(err){if(window.toast&&typeof window.toast.show==="function"){window.toast.show("Ошибка: "+err.message,"error")}else{console.warn("Toast not initialized yet")}ta.disabled=false}else{ta.value="";ta.style.height="auto";ta.disabled=false;ta.focus()}};
-    ta.addEventListener("keydown",e=>{if(e.key==="Enter"&&!e.shiftKey){e.preventDefault();send()}});sb.addEventListener("click",send)
+    const ta=document.getElementById("msg-input"),sb=document.getElementById("send-msg-btn");
+    if(!ta || !sb)return;
+
+    // Удаляем старые слушатели, чтобы избежать дублирования
+    const newTa = ta.cloneNode(true);
+    ta.parentNode.replaceChild(newTa, ta);
+    const newSb = sb.cloneNode(true);
+    sb.parentNode.replaceChild(newSb, sb);
+
+    newTa.addEventListener("input",()=>{newTa.style.height="auto";newTa.style.height=Math.min(newTa.scrollHeight,120)+"px"});
+    
+    const send = async () => {
+        const content = newTa.value.trim();
+        if(!content) return;
+        
+        newTa.disabled = true;
+        newSb.disabled = true;
+
+        const receiverId = isDM ? (channel.receiver_id === S.user.id ? channel.sender_id : channel.receiver_id) : null;
+        const friendId = isDM ? (S.friendsList.find(f => f.id === receiverId)?.id) : null;
+
+        let result;
+        if(isDM) {
+            result = await S.chat.sendDM(friendId || receiverId, content);
+        } else {
+            result = await S.chat.sendMessage(channel.id, content);
+        }
+
+        if(result.error){
+            if(window.toast&&typeof window.toast.show==="function"){window.toast.show("Ошибка отправки: "+result.error.message,"error")}else{console.warn("Toast not initialized yet")}
+            newTa.disabled = false;
+            newSb.disabled = false;
+        } else {
+            newTa.value="";
+            newTa.style.height="auto";
+            newTa.disabled=false;
+            newSb.disabled = false;
+            newTa.focus();
+        }
+    };
+
+    newTa.addEventListener("keydown",e=>{if(e.key==="Enter"&&!e.shiftKey){e.preventDefault();send()}});
+    newSb.addEventListener("click",send);
   }
   let _lastAuthor=null;
   function appendMessage(msg,pMap={}){
     const ct=document.getElementById("chat-messages");if(!ct)return;const em=ct.querySelector(".empty-state");if(em)em.remove();
     const isOwn = msg.sender_id === S.user.id;
     const s= isOwn ? S.profile : (pMap[msg.sender_id]||{});
-    const author=s.display_name||s.username||"?";const av=s.avatar_url||"";const time=new Date(msg.created_at).toLocaleTimeString([],{hour:"2-digit",minute:"2-digit"});
-    const showHeader=(author!==_lastAuthor);_lastAuthor=author;
-    const el=document.createElement("div");el.className="message";el.id="msg-"+msg.id;el.dataset.senderId=msg.sender_id;el.dataset.msgId=msg.id;
-    el.innerHTML=showHeader?`<div class="avatar">${av?`<img src="${av}">`:author.charAt(0).toUpperCase()}</div><div class="message-body"><div class="message-header"><span class="message-author">${esc(author)}</span><span class="message-time">${time}</span></div><div class="message-content">${esc(msg.content)}</div>${msg.edited?'<span class="message-edited">(изменено)</span>':''}</div>`:`<div class="avatar" style="visibility:hidden;"></div><div class="message-body"><div class="message-content">${esc(msg.content)}</div></div>`;
-    ct.appendChild(el);ct.scrollTop=ct.scrollHeight
+    const author=s.display_name||s.username||"?";const av=s.avatar_url||"";
+    const time=new Date(msg.created_at).toLocaleTimeString([],{hour:"2-digit",minute:"2-digit"});
+    
+    const showHeader= (author!==_lastAuthor);
+    if(showHeader) _lastAuthor=author;
+
+    const el=document.createElement("div");
+    el.className="message";
+    el.id="msg-"+msg.id;
+    el.dataset.senderId=msg.sender_id;
+    el.dataset.msgId=msg.id;
+
+    let contentHTML = esc(msg.content);
+    let statusHTML = msg.edited ? '<span class="message-edited">(изменено)</span>' : '';
+
+    if (msg.sending) {
+        statusHTML += ' <span class="message-status-sending" title="Отправка..."><i class="fa-regular fa-clock"></i></span>';
+    } else if (msg.error) {
+        statusHTML += ` <span class="message-status-error" title="${esc(msg.error)}"><i class="fa-solid fa-circle-exclamation"></i></span>`;
+        contentHTML += ` <button class="btn btn-sm btn-danger retry-send-btn" data-msg-id="${msg.id}" data-content="${esc(msg.content)}">Повторить</button>`;
+    }
+
+    const bodyHTML = `
+        <div class="message-body">
+            ${showHeader ? `<div class="message-header"><span class="message-author">${esc(author)}</span><span class="message-time">${time}</span></div>` : ''}
+            <div class="message-content">${contentHTML}</div>
+            ${statusHTML ? `<div class="message-status">${statusHTML}</div>` : ''}
+        </div>`;
+    
+    el.innerHTML = `
+        <div class="avatar">${showHeader ? (av?`<img src="${av}">`:author.charAt(0).toUpperCase()) : ''}</div>
+        ${bodyHTML}
+    `;
+
+    // Компактный режим
+    if(!showHeader){
+      el.classList.add("compact");
+    }
+
+    ct.appendChild(el);
+    ct.scrollTop=ct.scrollHeight;
+
+    // После добавления в DOM, если есть ошибка, навешиваем обработчик на кнопку "Повторить"
+    if (msg.error) {
+        const retryBtn = el.querySelector('.retry-send-btn');
+        if (retryBtn) {
+            retryBtn.addEventListener('click', () => {
+                const content = retryBtn.dataset.content;
+                const originalMsgId = retryBtn.dataset.msgId;
+                
+                // Удаляем старое сообщение об ошибке из DOM
+                document.getElementById(`msg-${originalMsgId}`)?.remove();
+                
+                // Повторно вызываем отправку, как будто пользователь ввел сообщение заново
+                // Предполагается, что у нас есть доступ к ID текущего канала/чата
+                if (S.chat && S.chat.currentChannelInfo) {
+                    const { id, isDM } = S.chat.currentChannelInfo;
+                    if (isDM) {
+                        S.chat.sendDM(id, content);
+                    } else {
+                        S.chat.sendMessage(id, content);
+                    }
+                }
+            });
+        }
+    }
   }
   function renderMembers(members){const list=document.getElementById("members-list");if(!list)return;const on=members.filter(m=>m.status==="online"||m.status==="idle"||m.status==="dnd"),off=members.filter(m=>!on.includes(m));let h="";if(on.length){h+=`<div class="sp-section-title">В сети — ${on.length}</div>`;on.forEach(m=>h+=memberItem(m))}if(off.length){h+=`<div class="sp-section-title">Не в сети — ${off.length}</div>`;off.forEach(m=>h+=memberItem(m))}list.innerHTML=h}
   function memberItem(m){const av=m.avatar_url?`<img src="${m.avatar_url}">`:(m.display_name||m.username||"?").charAt(0).toUpperCase();return `<div class="sp-item-friend"><div class="avatar avatar-sm">${av}</div><span class="status-dot status-${m.status||"offline"}"></span><span style="flex:1;font-size:12px;">${esc(m.display_name||m.username)}</span>${m.custom_status?`<span style="font-size:10px;color:var(--text-muted);">${esc(m.custom_status)}</span>`:""}</div>`}
