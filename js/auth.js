@@ -137,7 +137,7 @@
   }
 
   async function signOut(){await setOnlineStatus("offline");await sb.auth.signOut();S.user=null;S.profile=null;S.session=null;S.appLoaded=false}
-  async function recordLogin(){if(!S.user)return;try{await sb.from("daily_logins").insert({user_id:S.user.id,login_date:new Date().toISOString().slice(0,10)})}catch(e){}}
+  async function recordLogin(){if(!S.user)return;try{await sb.from("daily_logins").upsert({user_id:S.user.id,login_date:new Date().toISOString().slice(0,10)}, { onConflict: 'user_id,login_date' })}catch(e){console.error("Failed to record daily login:", e)}}
   async function setOnlineStatus(status){
     if(!S.user)return;
     await sb.from("profiles").update({status,last_login:new Date().toISOString()}).eq("id",S.user.id);

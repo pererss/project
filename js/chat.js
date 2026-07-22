@@ -189,36 +189,146 @@
     }
   }
 
-  // Note: DM functions (loadDMs, sendDM) should be refactored similarly.
-  // This example focuses on channel messages for clarity.
-  // For a complete solution, apply the same optimistic/resilient pattern to DMs.
-  
-  async function loadDMs(friendId){
-    // TODO: Refactor this function using the same pattern as loadMessages
-    // (unsubscribe, optimistic updates, robust subscription)
-    console.warn("loadDMs is not yet refactored.");
-    // Placeholder for original functionality to avoid breaking the app
-    const S_chat_original = S.chat;
-    if (S_chat_original && S_chat_original.loadDMs) {
-        return S_chat_original.loadDMs(friendId);
+  async function loadDMs(friendId) {
+    if (currentChannelId === friendId) return;
+    currentChannelId = friendId;
+    S.chat.currentChannelInfo = { id: friendId, isDM: true };
+
+    unsubscribeFromChannel();
+    S.ui.resetCompact();
+    shownMessageIds.clear();
+    optimisticMessageIds.clear();
+
+    try {
+        const chatContainer = document.getElementById("chat-messages");
+        if (!chatContainer) return;
+        chatContainer.innerHTML = '<div class="loading-spinner"></div>';
+
+        const { data: messages, error } = await sb.from("direct_messages").select("*").or(`and(sender_id.eq.${S.user.id},receiver_id.eq.${friendId}),and(sender_id.eq.${friendId},receiver_id.eq.${S.user.id})`).order("created_at", { ascending: true }).limit(100);
+        if (error) throw error;
+
+        const userIds = [...new Set((messages || []).map(m => m.sender_id))];
+        if (!userIds.includes(S.user.id)) userIds.push(S.user.id);
+        if (!userIds.includes(friendId)) userIds.push(friendId);
+        await fetchProfiles(userIds);
+
+        chatContainer.innerHTML = "";
+        if (!messages || !messages.length) {
+            chatContainer.innerHTML = '<div class="empty-state"><h3>Начните общение!</h3><p>Это начало вашей переписки.</p></div>';
+        } else {
+            messages.forEach(m => {
+                shownMessageIds.add(m.id);
+                S.ui.appendMessage(m, profileCache, true);
+            });
+        }
+        chatContainer.scrollTop = chatContainer.scrollHeight;
+
+        const dmChannelName = `dm-${[S.user.id, friendId].sort().join('-')}`;
+        currentSubscription = sb.channel(dmChannelName)
+            .on('postgres_changes', {
+                event: 'INSERT',
+                schema: 'public',
+                table: 'direct_messages',
+                filter: `or(and(sender_id.eq.${S.user.id},receiver_id.eq.${friendId}),and(sender_id.eq.${friendId},receiver_id.eq.${S.user.id}))`
+            }, (payload) => handleNewMessagePayload(payload, true))
+            .subscribe((status, err) => {
+                if (status === 'SUBSCRIBED') {
+                    console.log(`Successfully subscribed to DM channel: ${dmChannelName}`);
+                } else if (err) {
+                    console.error(`Subscription error on DM channel ${dmChannelName}:`, err.message);
+                    window.toast.show(`Ошибка подписки на ЛС: ${err.message}`, 'error');
+                }
+            });
+
+    } catch (e) {
+        console.error("loadDMs failed:", e.message);
+        window.toast.show(`Не удалось загрузить ЛС: ${e.message}`, 'error');
+        const ct = document.getElementById("chat-messages");
+        if (ct) ct.innerHTML = '<div class="empty-state error"><h3>Ошибка загрузки</h3><p>Не удалось загрузить историю переписки.</p></div>';
     }
   }
 
-  async function sendDM(receiverId, content){
-    // TODO: Refactor this function using the same pattern as sendMessage
-    console.warn("sendDM is not yet refactored.");
-    // Placeholder for original functionality
-    const S_chat_original = S.chat;
-    if (S_chat_original && S_chat_original.sendDM) {
-        return S_chat_original.sendDM(receiverId, content);
+  async function sendDM(receiverId, content) {
+    if (!S.user || !receiverId || !content) return { error: "Missing data" };
+
+    const trimmedContent = content.trim().slice(0, S.SENTCOR_CONFIG.MAX_MESSAGE_LENGTH);
+    if (!trimmedContent) return;
+
+    const optimisticId = crypto.randomUUID();
+    optimisticMessageIds.add(optimisticId);
+
+    const optimisticMsg = {
+        id: optimisticId,
+        receiver_id: receiverId,
+        sender_id: S.user.id,
+        content: trimmedContent,
+        created_at: new Date().toISOString(),
+        sending: true
+    };
+
+    if (!profileCache[S.user.id]) await fetchProfiles([S.user.id]);
+    S.ui.appendMessage(optimisticMsg, profileCache, true);
+
+    try {
+        const { data: sentMessage, error } = await sb.from("direct_messages").insert({
+            sender_id: S.user.id,
+            receiver_id: receiverId,
+            content: trimmedContent
+        }).select().single();
+
+        if (error) throw error;
+
+        const msgElement = document.getElementById(`msg-${optimisticId}`);
+        if (msgElement) {
+            msgElement.id = `msg-${sentMessage.id}`;
+            msgElement.classList.remove('sending');
+            const statusEl = msgElement.querySelector('.message-status-sending');
+            if (statusEl) statusEl.remove();
+        }
+        shownMessageIds.add(sentMessage.id);
+        optimisticMessageIds.delete(optimisticId);
+
+        return { data: sentMessage, error: null };
+
+    } catch (error) {
+        console.error("Failed to send DM:", error.message);
+        const errorMsgEl = document.getElementById(`msg-${optimisticId}`);
+        if (errorMsgEl) {
+            errorMsgEl.classList.add("error");
+            errorMsgEl.classList.remove("sending");
+
+            const statusSendingEl = errorMsgEl.querySelector('.message-status-sending');
+            if (statusSendingEl) statusSendingEl.remove();
+
+            let statusContainer = errorMsgEl.querySelector('.message-status');
+            if (!statusContainer) {
+                statusContainer = document.createElement('div');
+                statusContainer.className = 'message-status';
+                errorMsgEl.querySelector('.message-body').appendChild(statusContainer);
+            }
+            statusContainer.innerHTML += ` <span class="message-status-error" title="${S.escapeHtml(error.message)}"><i class="fa-solid fa-circle-exclamation"></i></span>`;
+
+            const contentContainer = errorMsgEl.querySelector('.message-content');
+            if (!contentContainer.querySelector('.retry-send-btn')) {
+                contentContainer.innerHTML += ` <button class="btn btn-sm btn-danger retry-send-btn">Повторить</button>`;
+                const retryBtn = contentContainer.querySelector('.retry-send-btn');
+                retryBtn.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    errorMsgEl.remove();
+                    sendDM(receiverId, trimmedContent);
+                });
+            }
+        }
+        optimisticMessageIds.delete(optimisticId);
+        return { error };
     }
   }
 
   S.chat={
     loadMessages,
     sendMessage,
-    loadDMs, // Kept for now, but needs refactoring
-    sendDM, // Kept for now, but needs refactoring
+    loadDMs,
+    sendDM,
     unsub: unsubscribeFromChannel, // Renamed for clarity
     fetchProfiles,
     pCache: profileCache, 

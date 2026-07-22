@@ -84,6 +84,12 @@
   }
 
   const toast = {
+    init: function() {
+      // This function is called on startup.
+      // It ensures styles are ready without showing a toast.
+      addStylesOnce();
+      console.log("Toast module initialized.");
+    },
     /**
      * Показывает уведомление (тост).
      * @param {string} message - Сообщение для отображения.
@@ -132,7 +138,9 @@
   };
 
   // Прикрепляем наш объект к глобальному объекту window
-  if (window) {
+  if (window.SENTCOR) {
+    window.SENTCOR.toast = toast;
+  } else {
     window.toast = toast;
   }
 
