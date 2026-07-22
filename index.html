@@ -30,28 +30,42 @@
   <script src="js/voice.js"></script>
 
   <script>
-    document.addEventListener('DOMContentLoaded', async function(){
-      const S=window.SENTCOR;
-      if (S.ui) {
-        S.ui.showAuth();
-      }
-      const ok=await S.auth.initSession();
-      if(ok){
-        S.appLoaded=true;
-        await S.auth.setOnlineStatus("online");
-        if (S.ui) {
-          S.ui.showApp();
+    document.addEventListener('DOMContentLoaded', async function() {
+      // 1. Initialize core components first
+      window.SENTCOR.ui.init(); // Initialize UI elements
+      window.SENTCOR.toast.init(); // Initialize toast notifications
+
+      // 2. Show loading state in the UI
+      window.SENTCOR.ui.showAuth(); // Or a dedicated loading screen
+
+      try {
+        // 3. Attempt to initialize the user session
+        const sessionInitialized = await window.SENTCOR.auth.initSession();
+
+        if (sessionInitialized) {
+          // 4. If session is valid, load the main application
+          window.SENTCOR.appLoaded = true;
+          await window.SENTCOR.auth.setOnlineStatus("online");
+          window.SENTCOR.ui.showApp();
+        } else {
+          // 5. If no session, the auth UI is already visible
+          console.log("No active session. Waiting for user to sign in.");
         }
+      } catch (error) {
+        // 6. Critical error during initialization
+        console.error("Critical initialization error:", error);
+        window.SENTCOR.ui.showErrorState("Не удалось запустить приложение. Пожалуйста, попробуйте обновить страницу.");
       }
-      window.addEventListener("beforeunload",(e)=>{
-        if(!S.appLoaded) return;
-        if(e) e.preventDefault();
-        if(S.user){
-          const u=S.SENTCOR_CONFIG.SUPABASE_URL+"/rest/v1/profiles?id=eq."+S.user.id;
-          navigator.sendBeacon(u,new Blob([JSON.stringify({status:"offline",last_login:new Date().toISOString()})],{type:"application/json"}))
-        }
+
+      // 7. Add robust unload handling
+      window.addEventListener("beforeunload", (e) => {
+        if (!window.SENTCOR.appLoaded || !window.SENTCOR.user) return;
+        // Use sendBeacon for reliable background data transfer on unload
+        const url = `${window.SENTCOR_CONFIG.SUPABASE_URL}/rest/v1/profiles?id=eq.${window.SENTCOR.user.id}`;
+        const data = JSON.stringify({ status: "offline", last_login: new Date().toISOString() });
+        const blob = new Blob([data], { type: "application/json" });
+        navigator.sendBeacon(url, blob);
       });
-      document.addEventListener("freeze",()=>{});
     });
   </script>
 </body>

@@ -158,11 +158,13 @@
     try {
       const{error}=await sb.auth.updateUser({password:npw});
       if(error) throw error;
-      if(window.toast&&typeof window.toast.show==="function"){window.toast.show("Пароль изменён!","success")}else{console.warn("Toast not initialized yet")}
+      // Use S.toast which is guaranteed to be initialized
+      S.toast.show("Пароль изменён!","success");
       return{error:null}
     } catch (e) {
       console.error("changePassword failed:", e.message);
-      if(window.toast&&typeof window.toast.show==="function"){window.toast.show("Ошибка смены пароля: " + e.message,"error")}else{console.warn("Toast not initialized yet")}
+      // Use S.toast which is guaranteed to be initialized
+      S.toast.show("Ошибка смены пароля: " + e.message,"error");
       return {error: e.message};
     }
   }
