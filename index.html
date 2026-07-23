@@ -7,8 +7,117 @@
   <meta name="description" content="SENTCOR — игровой мессенджер с голосовыми чатами, серверами и друзьями." />
   <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🎮</text></svg>" />
   
-  <link rel="stylesheet" href="css/theme-monochrome.css" />
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" />
+
+  <style>
+    /* Base Styles & Dark Theme */
+    :root {
+      --background-gradient-start: #050505;
+      --background-gradient-end: #141417;
+      --card-background: rgba(24, 24, 27, 0.7);
+      --card-border: rgba(55, 55, 62, 0.5);
+      --text-primary: #e4e4e7;
+      --text-secondary: #a1a1aa;
+      --primary-color: #3b82f6;
+      --input-background: #27272a;
+      --input-border: #3f3f46;
+    }
+    html, body {
+      margin: 0;
+      padding: 0;
+      height: 100%;
+      width: 100%;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+      background: linear-gradient(145deg, var(--background-gradient-start), var(--background-gradient-end));
+      color: var(--text-primary);
+      overflow: hidden;
+    }
+    #app {
+      height: 100%;
+      width: 100%;
+    }
+    .screen {
+      width: 100%;
+      height: 100%;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      flex-direction: column;
+      box-sizing: border-box;
+      position: absolute;
+      top: 0;
+      left: 0;
+      transition: opacity 0.3s ease-in-out;
+    }
+
+    /* Spinner for Loading Screen */
+    .spinner {
+      width: 56px;
+      height: 56px;
+      border: 5px solid var(--card-border);
+      border-bottom-color: var(--primary-color);
+      border-radius: 50%;
+      display: inline-block;
+      box-sizing: border-box;
+      animation: rotation 1s linear infinite;
+    }
+    @keyframes rotation {
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
+    }
+
+    /* Auth Screen Styles */
+    .auth-container {
+      width: 100%;
+      max-width: 400px;
+      padding: 20px;
+    }
+    .auth-card {
+      background: var(--card-background);
+      border: 1px solid var(--card-border);
+      border-radius: 12px;
+      padding: 40px;
+      backdrop-filter: blur(10px);
+      box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
+    }
+    .auth-header { text-align: center; margin-bottom: 30px; }
+    .auth-title { font-size: 2.5rem; font-weight: 700; margin: 0; color: var(--text-primary); }
+    .auth-subtitle { font-size: 1rem; color: var(--text-secondary); margin-top: 8px; }
+    .input-group { margin-bottom: 20px; }
+    .input-group label { display: block; margin-bottom: 8px; font-size: 0.9rem; color: var(--text-secondary); }
+    .input-group input {
+      width: 100%;
+      padding: 12px;
+      background: var(--input-background);
+      border: 1px solid var(--input-border);
+      border-radius: 8px;
+      color: var(--text-primary);
+      font-size: 1rem;
+      box-sizing: border-box;
+    }
+    .btn {
+      padding: 12px;
+      border: none;
+      border-radius: 8px;
+      font-size: 1rem;
+      font-weight: 600;
+      cursor: pointer;
+      width: 100%;
+    }
+    .btn-primary { background-color: var(--primary-color); color: white; }
+    .auth-footer { text-align: center; margin-top: 20px; font-size: 0.9rem; color: var(--text-secondary); }
+    .auth-footer a { color: var(--primary-color); text-decoration: none; }
+    .auth-error-message {
+        color: #f87171;
+        background-color: #450a0a;
+        border: 1px solid #ef4444;
+        padding: 10px;
+        border-radius: 8px;
+        margin-bottom: 20px;
+        text-align: center;
+        display: none; /* Hidden by default */
+    }
+  </style>
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="https://cdn.jsdelivr.net/npm/livekit-client@2/dist/livekit-client.umd.min.js"></script>
@@ -19,14 +128,13 @@
 </head>
 <body>
 
-  <!-- Declarative Screen Structure -->
   <div id="app">
-    <!-- Loading Screen (Visible by default) -->
-    <div id="loading-screen" class="screen" style="display: flex; justify-content: center; align-items: center; opacity: 1; z-index: 9999;">
+    <!-- 1. Loading Screen (Visible by default) -->
+    <div id="loading-screen" class="screen">
         <div class="spinner"></div>
     </div>
 
-    <!-- Auth Screen (Hidden by default) -->
+    <!-- 2. Auth Screen (Hidden by default) -->
     <div id="auth-screen" class="screen" style="display: none;">
         <div class="auth-container">
             <div class="auth-card">
@@ -44,7 +152,7 @@
                         <label for="password">Пароль</label>
                         <input type="password" id="password" name="password" required autocomplete="current-password">
                     </div>
-                    <button type="submit" class="btn btn-primary btn-block">Войти</button>
+                    <button type="submit" class="btn btn-primary">Войти</button>
                 </form>
                 <div class="auth-footer">
                     <p>Нет аккаунта? <a href="#" id="show-signup-link">Создать</a></p>
@@ -53,12 +161,12 @@
         </div>
     </div>
 
-    <!-- Main App Screen (Hidden by default) -->
+    <!-- 3. Main App Screen (Hidden by default) -->
     <div id="main-app-screen" class="screen" style="display: none;">
         <!-- Main application content will be rendered here -->
     </div>
 
-    <!-- Error Screen (Hidden by default) -->
+    <!-- 4. Error Screen (Hidden by default) -->
     <div id="error-screen" class="screen" style="display: none;">
         <!-- Error content will be rendered here by ui.js -->
     </div>
@@ -84,33 +192,19 @@
   <!-- Main Application Entry Point -->
   <script>
     S.ui.onReady(async function() {
-      // Phase 1: Core System Initialization
       S.toast.init();
-      S.ui.init(); // This now just caches existing DOM elements
+      S.ui.init();
       
-      // The loading screen is already visible from the HTML.
-
       try {
-        // Phase 2: Session & Connection
         const sessionInitialized = await S.auth.initSession();
-        
-        if (sessionInitialized) {
-          // onAuthStateChange in auth.js will handle the transition to S.ui.showApp()
-        } else {
+        if (!sessionInitialized) {
           console.log("No active session. Displaying Auth UI.");
-          S.ui.showAuth(); // This will hide loading and show the auth form
+          S.ui.showAuth();
         }
       } catch (error) {
-        // Phase 4: Critical Failure Handling
         console.error("CRITICAL INITIALIZATION FAILURE: ", error);
         S.ui.showErrorState("Критическая ошибка. Не удалось запустить приложение.", error);
       }
-
-      // Unload handler
-      window.addEventListener("beforeunload", () => {
-        if (!S.appLoaded || !S.user) return;
-        S.auth.setOnlineStatus("offline");
-      });
     });
   </script>
 </body>
