@@ -1,12 +1,21 @@
-// SENTCOR v15.0 — Auth Module with Client Export
+// SENTCOR v16.0 — Explicit Client Export Guarantee
 window.S = window.S || {};
+window.S.auth = window.S.auth || {};
+
+/**
+ * Guarantees that the getSupabaseClient function is available on the global scope.
+ * It provides a reliable way to access the Supabase client from different modules.
+ */
+window.S.auth.getSupabaseClient = function() {
+    return window.supabaseClient || window.S.supabase || null;
+};
 
 S.auth = (function () {
     let supabaseClient = null;
 
     /**
-     * Initializes the Supabase client.
-     * This should be called by supabase.js after config is loaded.
+     * Initializes the Supabase client and stores it locally.
+     * This is the primary entry point called by supabase.js.
      * @param {object} client - The Supabase client instance.
      */
     function initClient(client) {
@@ -15,18 +24,9 @@ S.auth = (function () {
             return;
         }
         supabaseClient = client;
-        console.log('[Auth] Supabase client initialized.');
-    }
-
-    /**
-     * Returns the initialized Supabase client.
-     * @returns {object|null} The Supabase client instance.
-     */
-    function getSupabaseClient() {
-        if (!supabaseClient) {
-            console.warn('[Auth] getSupabaseClient() called before client was initialized.');
-        }
-        return supabaseClient;
+        // Also ensure the global reference is set for other modules.
+        window.supabaseClient = client; 
+        console.log('[Auth] Supabase client initialized and globally available.');
     }
 
     /**
@@ -36,7 +36,14 @@ S.auth = (function () {
     async function initSession() {
         if (window.S?.ui?.showLoading) await window.S.ui.showLoading('Проверка сессии...');
         
-        const { data: { session }, error } = await supabaseClient.auth.getSession();
+        const supabase = window.S.auth.getSupabaseClient();
+        if (!supabase) {
+            console.error('[Auth] Supabase client not available for session check.');
+            if (window.S?.ui?.showErrorState) S.ui.showErrorState('Критическая ошибка: Клиент не найден.');
+            return;
+        }
+
+        const { data: { session }, error } = await supabase.auth.getSession();
 
         if (error) {
             console.error('[Auth] Error getting session:', error);
@@ -66,7 +73,6 @@ S.auth = (function () {
         const errorMessage = document.getElementById('auth-error-message');
         if (!form) return;
 
-        // Simplified form for demonstration
         form.innerHTML = `
             <div class="input-group">
                 <label for="email">Email</label>
@@ -79,9 +85,11 @@ S.auth = (function () {
             e.preventDefault();
             errorMessage.textContent = '';
             const email = e.target.email.value;
+            const supabase = window.S.auth.getSupabaseClient();
 
             try {
-                const { error } = await supabaseClient.auth.signInWithOtp({ email });
+                if (!supabase) throw new Error("Клиент Supabase не инициализирован.");
+                const { error } = await supabase.auth.signInWithOtp({ email });
                 if (error) throw error;
                 alert('Проверьте свою почту для входа!');
             } catch (error) {
@@ -97,8 +105,9 @@ S.auth = (function () {
      * Signs the user out.
      */
     async function signOut() {
-        if (!supabaseClient) return;
-        await supabaseClient.auth.signOut();
+        const supabase = window.S.auth.getSupabaseClient();
+        if (!supabase) return;
+        await supabase.auth.signOut();
         window.location.reload();
     }
 
@@ -107,7 +116,7 @@ S.auth = (function () {
         initClient,
         initSession,
         showAuthUI,
-        getSupabaseClient, // Correctly exposed
+        getSupabaseClient: window.S.auth.getSupabaseClient, // Ensure consistency
         signOut,
     };
 })();

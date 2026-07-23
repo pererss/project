@@ -1,10 +1,21 @@
-// SENTCOR v2.0 — Safe Client Access & Full UI Logic
+// SENTCOR v3.0 — Robust Client Access & Resilient UI
 window.S = window.S || {};
+
+/**
+ * Universal and safe function to get the Supabase client.
+ * Checks multiple global locations to ensure the client is found if it exists.
+ * @returns {object|null} The Supabase client instance or null.
+ */
+function getClient() {
+    return window.supabaseClient || 
+           (window.S?.auth?.getSupabaseClient && window.S.auth.getSupabaseClient()) || 
+           window.S?.supabase || 
+           null;
+}
 
 S.app = (function () {
     let friendsCache = [];
 
-    // Cache DOM elements for performance
     const elements = {
         friendsList: null,
         friendSearchInput: null,
@@ -12,19 +23,8 @@ S.app = (function () {
         profileUsername: null,
         profileSubtext: null,
         profileAvatarImg: null,
+        userSearchResults: null,
     };
-
-    /**
-     * Safely retrieves the Supabase client.
-     * @returns {object|null} The Supabase client instance or null.
-     */
-    function getSupabaseClient() {
-        if (window.S?.auth?.getSupabaseClient) {
-            return window.S.auth.getSupabaseClient();
-        }
-        console.warn('[App] S.auth.getSupabaseClient() not found. Falling back to window.supabaseClient.');
-        return window.supabaseClient || null;
-    }
 
     function getFriendHTML(friend) {
         const username = friend.username || friend.user_name || 'Безымянный';
@@ -48,7 +48,7 @@ S.app = (function () {
         if (!elements.friendsList) return;
 
         if (!friends || friends.length === 0) {
-            elements.friendsList.innerHTML = `<div class="empty-list-placeholder">Друзей не найдено</div>`;
+            elements.friendsList.innerHTML = `<div class="empty-list-placeholder">Список пока пуст</div>`;
             return;
         }
         elements.friendsList.innerHTML = friends.map(getFriendHTML).join('');
@@ -59,53 +59,68 @@ S.app = (function () {
 
         elements.friendsList.innerHTML = S.ui.getSkeletonHTML('friend', 5);
 
-        const supabase = getSupabaseClient();
+        const supabase = getClient();
         if (!supabase) {
-            console.error('[App] Supabase client is not available for fetching friends.');
-            elements.friendsList.innerHTML = '<div class="error-placeholder">Ошибка клиента.</div>';
+            console.warn('[App] Supabase client is not ready yet, skipping fetch.');
+            elements.friendsList.innerHTML = '<div class="error-placeholder">Не удалось подключиться.</div>';
             return;
         }
 
         try {
-            // This is a placeholder for fetching actual friends.
-            // For now, we'll use some mock data.
+            // Mock data for demonstration purposes
             const mockFriends = [
-                { id: 1, user_name: 'Alice', is_online: true, avatar_url: null },
-                { id: 2, user_name: 'Bob', is_online: false, avatar_url: null },
-                { id: 3, user_name: 'Charlie', is_online: true, avatar_url: null },
-                { id: 4, user_name: 'David', is_online: false, avatar_url: null },
-                { id: 5, user_name: 'Eve', is_online: true, avatar_url: null },
+                { id: 1, user_name: 'Екатерина', is_online: true, avatar_url: null },
+                { id: 2, user_name: 'Дмитрий', is_online: false, avatar_url: null },
+                { id: 3, user_name: 'Алиса', is_online: true, avatar_url: null },
             ];
             
-            // Simulate network delay
-            await new Promise(resolve => setTimeout(resolve, 500));
+            await new Promise(resolve => setTimeout(resolve, 700)); // Simulate network delay
 
             friendsCache = mockFriends;
             renderFriendsList(friendsCache);
 
         } catch (error) {
             console.error('[App] Error fetching friends:', error);
-            elements.friendsList.innerHTML = '<div class="error-placeholder">Не удалось загрузить друзей.</div>';
+            elements.friendsList.innerHTML = '<div class="error-placeholder">Не удалось подгрузить друзей.</div>';
             S.toast.show('Ошибка при загрузке списка друзей.', { type: 'error' });
         }
     }
     
     async function fetchAndRenderUserProfile() {
-        const supabase = getSupabaseClient();
-        if (!supabase) return;
+        try {
+            const supabase = getClient();
+            if (!supabase) return;
 
-        const { data: { user } } = await supabase.auth.getUser();
+            const { data: { user } } = await supabase.auth.getUser();
 
-        if (user && elements.profileUsername) {
-            const username = user.user_metadata?.user_name || user.email.split('@')[0];
-            const avatarUrl = user.user_metadata?.avatar_url || 'assets/default-avatar.png';
-            
-            elements.profileUsername.textContent = username;
-            elements.profileSubtext.textContent = "в сети"; // Placeholder status
-            elements.profileAvatarImg.src = avatarUrl;
+            if (user && elements.profileUsername) {
+                const username = user.user_metadata?.user_name || user.email.split('@')[0];
+                const avatarUrl = user.user_metadata?.avatar_url || 'assets/default-avatar.png';
+                
+                elements.profileUsername.textContent = username;
+                elements.profileSubtext.textContent = "в сети";
+                elements.profileAvatarImg.src = avatarUrl;
+            }
+        } catch (error) {
+            console.error('[App] Error fetching user profile:', error);
+            if (elements.profileUsername) {
+                elements.profileUsername.textContent = "Ошибка";
+            }
         }
     }
 
+    function debounce(func, delay) {
+        let timeout;
+        return function(...args) {
+            clearTimeout(timeout);
+            timeout = setTimeout(() => func.apply(this, args), delay);
+        };
+    }
+
+    async function searchUsers(searchTerm) {
+        // This function remains for future implementation
+        console.log(`Searching for: ${searchTerm}`);
+    }
 
     function handleFriendSearch() {
         if (!elements.friendSearchInput) return;
@@ -113,25 +128,23 @@ S.app = (function () {
         const debouncedSearch = debounce(searchUsers, 300);
 
         elements.friendSearchInput.addEventListener('input', (e) => {
-            const searchTerm = e.target.value.toLowerCase();
+            const searchTerm = e.target.value.toLowerCase().trim();
             if (searchTerm) {
-                // Hide friends list and show search results
                 elements.friendsListContainer.classList.add('hidden');
+                if (elements.userSearchResults) {
+                    elements.userSearchResults.classList.add('visible');
+                }
                 debouncedSearch(searchTerm);
             } else {
-                // Show friends list and hide search results
                 elements.friendsListContainer.classList.remove('hidden');
                 if (elements.userSearchResults) {
                     elements.userSearchResults.classList.remove('visible');
                 }
-                renderFriendsList(friendsCache); // Re-render original list
+                renderFriendsList(friendsCache);
             }
         });
     }
 
-    /**
-     * Query all DOM elements needed by the app.
-     */
     function queryElements() {
         elements.friendsList = document.getElementById('friends-list');
         elements.friendSearchInput = document.getElementById('friend-search-input');
@@ -139,6 +152,7 @@ S.app = (function () {
         elements.profileUsername = document.getElementById('profile-username');
         elements.profileSubtext = document.getElementById('profile-subtext');
         elements.profileAvatarImg = document.getElementById('profile-avatar-img');
+        elements.userSearchResults = document.getElementById('user-search-results');
     }
 
     async function init() {
@@ -147,7 +161,6 @@ S.app = (function () {
         
         queryElements();
         
-        // Fetch data in parallel
         await Promise.all([
             fetchAndRenderFriends(),
             fetchAndRenderUserProfile()
