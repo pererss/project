@@ -15,7 +15,10 @@
     :root {
       --text-primary: #e4e4e7;
       --text-secondary: #a1a1aa;
-      --accent-glow: 0 0 15px rgba(99, 102, 241, 0.5), 0 0 5px rgba(99, 102, 241, 0.8);
+      --accent-color: #8a2be2; /* Blue Violet */
+      --accent-glow: 0 0 15px rgba(138, 43, 226, 0.5), 0 0 5px rgba(138, 43, 226, 0.8);
+      --bg-primary: #050508;
+      --bg-secondary: #15151a;
     }
     
     html, body {
@@ -24,12 +27,12 @@
       height: 100%;
       width: 100%;
       font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
-      background: radial-gradient(circle at center, #18181c 0%, #050505 100%);
+      background: radial-gradient(circle, var(--bg-secondary) 0%, var(--bg-primary) 100%);
       color: var(--text-primary);
       overflow: hidden;
     }
 
-    #app { height: 100%; width: 100%; }
+    #app { height: 100%; width: 100%; position: relative; }
 
     .screen {
       width: 100%;
@@ -42,26 +45,58 @@
       position: absolute;
       top: 0;
       left: 0;
-      transition: opacity 0.4s ease, visibility 0.4s;
+      transition: opacity 0.3s ease, visibility 0.3s ease;
       visibility: hidden;
       opacity: 0;
     }
-    .screen[style*="display: flex"] {
+    .screen.visible {
       visibility: visible;
       opacity: 1;
     }
 
-    .spinner {
-      width: 56px; height: 56px;
-      border: 5px solid rgba(255, 255, 255, 0.1);
-      border-bottom-color: #6366f1;
-      border-radius: 50%;
-      display: inline-block;
-      box-sizing: border-box;
-      animation: rotation 1s linear infinite;
+    /* Preloader Styles */
+    .preloader-container {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 24px;
     }
-    @keyframes rotation { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+    .preloader-logo {
+      font-size: 4rem;
+      font-weight: 700;
+      color: #fff;
+      text-shadow: 0 0 10px #fff, 0 0 20px #fff, 0 0 40px var(--accent-color), 0 0 60px var(--accent-color);
+      animation: pulse 2s infinite ease-in-out;
+    }
+    .preloader-spinner {
+      width: 80px;
+      height: 80px;
+      border-radius: 50%;
+      border: 3px solid rgba(255, 255, 255, 0.1);
+      border-top-color: transparent;
+      border-left-color: var(--accent-color);
+      box-shadow: 0 0 15px rgba(138, 43, 226, 0.5);
+      animation: spin 1.2s cubic-bezier(0.5, 0, 0.5, 1) infinite;
+    }
+    .preloader-text {
+      color: var(--text-secondary);
+      font-size: 1rem;
+      animation: flicker 1.8s infinite;
+    }
 
+    @keyframes pulse {
+      0%, 100% { opacity: 0.8; transform: scale(1); }
+      50% { opacity: 1; transform: scale(1.05); }
+    }
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+    @keyframes flicker {
+      0%, 100% { opacity: 0.6; }
+      50% { opacity: 1; }
+    }
+
+    /* Auth Screen Styles (from previous step, slightly adapted) */
     .auth-card {
       background: rgba(20, 20, 25, 0.75);
       backdrop-filter: blur(16px);
@@ -72,86 +107,164 @@
       max-width: 400px;
       box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
     }
-
     .auth-header { text-align: center; margin-bottom: 32px; }
     .auth-title { font-size: 2.25rem; font-weight: 700; margin: 0; }
     .auth-subtitle { font-size: 1rem; color: var(--text-secondary); margin-top: 8px; }
-
     .input-group { margin-bottom: 20px; }
-    .input-group label {
-      display: block;
-      margin-bottom: 8px;
-      font-size: 0.875rem;
-      font-weight: 500;
-      color: var(--text-secondary);
-    }
+    .input-group label { display: block; margin-bottom: 8px; font-size: 0.875rem; font-weight: 500; color: var(--text-secondary); }
     .input-group input {
-      width: 100%;
-      padding: 12px;
-      background: rgba(255, 255, 255, 0.05);
-      border: 1px solid rgba(255, 255, 255, 0.1);
-      border-radius: 8px;
-      color: var(--text-primary);
-      font-size: 1rem;
-      box-sizing: border-box;
+      width: 100%; padding: 12px; background: rgba(255, 255, 255, 0.05);
+      border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 8px;
+      color: var(--text-primary); font-size: 1rem; box-sizing: border-box;
       transition: border-color 0.2s, box-shadow 0.2s;
     }
-    .input-group input:focus {
-      outline: none;
-      border-color: rgba(99, 102, 241, 0.7);
-      box-shadow: var(--accent-glow);
-    }
-
+    .input-group input:focus { outline: none; border-color: rgba(138, 43, 226, 0.7); box-shadow: var(--accent-glow); }
     .btn {
-      padding: 12px;
-      border: none;
-      border-radius: 8px;
-      font-size: 1rem;
-      font-weight: 600;
-      cursor: pointer;
-      width: 100%;
-      transition: transform 0.2s ease, box-shadow 0.2s ease;
+      padding: 12px; border: none; border-radius: 8px; font-size: 1rem; font-weight: 600;
+      cursor: pointer; width: 100%; transition: transform 0.2s ease, box-shadow 0.2s ease;
     }
     .btn:hover { transform: translateY(-2px); }
     .btn:active { transform: translateY(0); }
-
-    .btn-primary {
-      background: linear-gradient(90deg, #4f46e5, #6366f1);
-      color: white;
-      box-shadow: 0 4px 15px rgba(99, 102, 241, 0.3);
-    }
+    .btn-primary { background: linear-gradient(90deg, #6d28d9, #8b5cf6); color: white; box-shadow: 0 4px 15px rgba(138, 43, 226, 0.3); }
     .btn-primary:hover { box-shadow: var(--accent-glow); }
-    
-    .btn-secondary {
-      background: rgba(255, 255, 255, 0.05);
-      border: 1px solid rgba(255, 255, 255, 0.1);
-      color: var(--text-primary);
-    }
+    .btn-secondary { background: rgba(255, 255, 255, 0.05); border: 1px solid rgba(255, 255, 255, 0.1); color: var(--text-primary); }
     .btn-secondary:hover { background: rgba(255, 255, 255, 0.1); }
-
     .auth-footer { text-align: center; margin-top: 24px; font-size: 0.875rem; color: var(--text-secondary); }
-    .auth-footer a { color: #818cf8; text-decoration: none; font-weight: 500; }
+    .auth-footer a { color: #a78bfa; text-decoration: none; font-weight: 500; }
     .auth-footer a:hover { text-decoration: underline; }
-
-    .auth-error-message {
-      color: #fca5a5;
-      background-color: rgba(239, 68, 68, 0.1);
-      border: 1px solid rgba(239, 68, 68, 0.3);
-      padding: 12px;
-      border-radius: 8px;
-      margin-bottom: 20px;
-      text-align: center;
-      display: none;
-    }
-
-    .auth-divider {
-      text-align: center; margin: 24px 0; color: var(--text-secondary);
-      font-size: 0.75rem; text-transform: uppercase; display: flex; align-items: center;
-    }
-    .auth-divider::before, .auth-divider::after {
-      content: ''; flex: 1; border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-    }
+    .auth-error-message { color: #fca5a5; background-color: rgba(239, 68, 68, 0.1); border: 1px solid rgba(239, 68, 68, 0.3); padding: 12px; border-radius: 8px; margin-bottom: 20px; text-align: center; display: none; }
+    .auth-divider { text-align: center; margin: 24px 0; color: var(--text-secondary); font-size: 0.75rem; text-transform: uppercase; display: flex; align-items: center; }
+    .auth-divider::before, .auth-divider::after { content: ''; flex: 1; border-bottom: 1px solid rgba(255, 255, 255, 0.1); }
     .auth-divider span { padding: 0 16px; }
+
+    .app-layout {
+      display: flex;
+      width: 100%;
+      height: 100vh;
+    }
+    .sidebar {
+      width: 320px;
+      background-color: rgba(10, 10, 12, 0.8);
+      border-right: 1px solid rgba(255, 255, 255, 0.05);
+      display: flex;
+      flex-direction: column;
+    }
+    .sidebar-header {
+        padding: 16px;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+    }
+    .search-input {
+        width: 100%;
+        padding: 10px 16px;
+        background: rgba(255, 255, 255, 0.05);
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        border-radius: 8px;
+        color: var(--text-primary);
+        font-size: 0.9rem;
+        box-sizing: border-box;
+        transition: all 0.2s ease;
+    }
+    .search-input:focus {
+        outline: none;
+        border-color: rgba(138, 43, 226, 0.7);
+        box-shadow: var(--accent-glow);
+    }
+    .scrollable-list {
+        overflow-y: auto;
+        flex-grow: 1;
+    }
+    .main-content {
+      flex-grow: 1;
+      padding: 24px;
+    }
+    .friend-item {
+        display: flex;
+        align-items: center;
+        padding: 12px 16px;
+        cursor: pointer;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.03);
+        transition: background-color 0.2s ease;
+    }
+    .friend-item:hover {
+        background-color: rgba(255, 255, 255, 0.04);
+    }
+    .friend-avatar {
+        position: relative;
+        margin-right: 12px;
+    }
+    .friend-avatar img {
+        width: 40px;
+        height: 40px;
+        border-radius: 50%;
+    }
+    .status-indicator {
+        position: absolute;
+        bottom: 0;
+        right: 0;
+        width: 12px;
+        height: 12px;
+        border-radius: 50%;
+        border: 2px solid var(--bg-secondary);
+    }
+    .status-indicator.online { background-color: #22c55e; }
+    .status-indicator.offline { background-color: #71717a; }
+    .friend-info {
+        flex-grow: 1;
+    }
+    .friend-name {
+        font-weight: 600;
+        color: var(--text-primary);
+    }
+    .friend-last-message {
+        font-size: 0.875rem;
+        color: var(--text-secondary);
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        max-width: 150px;
+    }
+    .friend-meta {
+        text-align: right;
+        font-size: 0.75rem;
+        color: var(--text-secondary);
+    }
+    .last-message-time {
+        margin-bottom: 4px;
+    }
+    .unread-count {
+        background-color: var(--accent-color);
+        color: white;
+        font-weight: 600;
+        border-radius: 10px;
+        padding: 2px 6px;
+        font-size: 0.7rem;
+        display: inline-block;
+    }
+    .empty-list-placeholder, .error-placeholder {
+        text-align: center;
+        padding: 40px 20px;
+        color: var(--text-secondary);
+    }
+
+    /* Skeleton Loader Styles */
+    .skeleton {
+      animation: skeleton-loading 1s linear infinite alternate;
+    }
+    .skeleton-text {
+      width: 100%;
+      height: 1em;
+      margin-bottom: .5em;
+      border-radius: .25rem;
+    }
+    .skeleton-avatar {
+      width: 40px;
+      height: 40px;
+      border-radius: 50%;
+    }
+    @keyframes skeleton-loading {
+      0% { background-color: rgba(255, 255, 255, 0.05); }
+      100% { background-color: rgba(255, 255, 255, 0.1); }
+    }
   </style>
 
   <!-- Core Libraries -->
@@ -166,8 +279,14 @@
 <body>
 
   <div id="app">
-    <div id="loading-screen" class="screen" style="display: flex;"><div class="spinner"></div></div>
-    <div id="auth-screen" class="screen" style="display: none;">
+    <div id="loading-screen" class="screen visible">
+      <div class="preloader-container">
+        <div class="preloader-logo">S</div>
+        <div class="preloader-spinner"></div>
+        <p id="loading-status-text" class="preloader-text">Загрузка SentCor...</p>
+      </div>
+    </div>
+    <div id="auth-screen" class="screen">
         <div class="auth-card">
             <div class="auth-header">
                 <h1 class="auth-title">Вход</h1>
@@ -178,8 +297,8 @@
             <div id="auth-footer"></div>
         </div>
     </div>
-    <div id="main-app-screen" class="screen" style="display: none;"></div>
-    <div id="error-screen" class="screen" style="display: none;"></div>
+    <div id="main-app-screen" class="screen"></div>
+    <div id="error-screen" class="screen"></div>
   </div>
   <div id="toast-container"></div>
 
@@ -204,26 +323,20 @@
     document.addEventListener('DOMContentLoaded', async () => {
       if (window.S?.toast?.init) window.S.toast.init();
       if (window.S?.ui?.init) window.S.ui.init();
+      
+      await S.ui.showLoading('Инициализация...');
 
       try {
         const sessionInitialized = await window.S.auth.initSession();
+        await S.ui.hideLoading();
         if (!sessionInitialized) {
           console.log("[Init] No active session. Showing auth screen.");
-          if (window.S?.ui?.showAuth) {
-            window.S.ui.showAuth();
-          } else {
-            const authScreen = document.getElementById('auth-screen');
-            if (authScreen) authScreen.style.display = 'flex';
-          }
+          S.ui.showAuth();
         }
       } catch (err) {
         console.warn('[Init] Soft failure during session initialization:', err);
-        if (window.S?.ui?.showAuth) {
-          window.S.ui.showAuth();
-        } else {
-           const authScreen = document.getElementById('auth-screen');
-           if (authScreen) authScreen.style.display = 'flex';
-        }
+        await S.ui.hideLoading();
+        S.ui.showAuth();
       }
     });
   </script>

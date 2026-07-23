@@ -63,8 +63,12 @@
     }
 
     async function handleSuccessfulLogin(user) {
-        S.ui.showApp();
-        // Further initializations can go here
+        if (S.app && typeof S.app.init === 'function') {
+            S.app.init();
+        } else {
+            console.error('[Auth] S.app.init() is not available. Cannot start the main application.');
+            S.ui.showErrorState('Не удалось запустить основное приложение.');
+        }
     }
 
     function renderAuthForm() {
