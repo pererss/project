@@ -139,23 +139,15 @@
         <div class="auth-container">
             <div class="auth-card">
                 <div class="auth-header">
-                    <h1 class="auth-title">SENTCOR</h1>
-                    <p class="auth-subtitle">Вход в игровой мессенджер</p>
+                    <h1 class="auth-title">Вход</h1>
+                    <p class="auth-subtitle">Войдите в свой аккаунт SENTCOR</p>
                 </div>
                 <div id="auth-error-message" class="auth-error-message"></div>
                 <form id="auth-form">
-                    <div class="input-group">
-                        <label for="email">Email</label>
-                        <input type="email" id="email" name="email" required autocomplete="email">
-                    </div>
-                    <div class="input-group">
-                        <label for="password">Пароль</label>
-                        <input type="password" id="password" name="password" required autocomplete="current-password">
-                    </div>
-                    <button type="submit" class="btn btn-primary">Войти</button>
+                    <!-- Fields will be dynamically added by auth.js -->
                 </form>
-                <div class="auth-footer">
-                    <p>Нет аккаунта? <a href="#" id="show-signup-link">Создать</a></p>
+                <div id="auth-footer" class="auth-footer">
+                    <!-- Footer will be dynamically added by auth.js -->
                 </div>
             </div>
         </div>
@@ -163,7 +155,7 @@
 
     <!-- 3. Main App Screen (Hidden by default) -->
     <div id="main-app-screen" class="screen" style="display: none;">
-        <!-- Main application content will be rendered here -->
+        <!-- Main application content will be rendered by main.js -->
     </div>
 
     <!-- 4. Error Screen (Hidden by default) -->
@@ -188,6 +180,7 @@
   <script src="js/profile.js"></script>
   <script src="js/chat.js"></script>
   <script src="js/voice.js"></script>
+  <script src="js/main.js"></script> <!-- Newly Added -->
 
   <!-- Main Application Entry Point -->
   <script>

@@ -1,4 +1,4 @@
-// SENTCOR v20.0 — Self-Healing Screen Manager
+// SENTCOR v20.1 — Self-Healing Screen Manager (Stable)
 (function() {
     "use strict";
 
@@ -18,7 +18,7 @@
 
     /**
      * Initializes the UI by caching or creating DOM elements.
-     * This function is now resilient and will create screen containers if they are missing.
+     * This function is resilient and will create screen containers if they are missing.
      */
     function init() {
         const appContainer = document.getElementById('app');
@@ -49,8 +49,7 @@
 
     /**
      * The definitive screen management function.
-     * Aggressively hides all other screens and shows only the target screen.
-     * @param {string} screenToShow - The key of the screen to show (e.g., 'loading', 'auth').
+     * Its only job is to manage screen visibility.
      */
     function showScreen(screenToShow) {
         if (!elements[screenToShow]) {
@@ -62,17 +61,13 @@
 
         screenIds.forEach(id => {
             const el = elements[id];
-            // This check is safe because init guarantees the element exists.
-            
             if (id === screenToShow) {
-                // --- FORCE SHOW ---
                 el.style.display = 'flex';
                 el.style.visibility = 'visible';
                 el.style.opacity = '1';
                 el.style.zIndex = '1000';
                 el.style.pointerEvents = 'auto';
             } else {
-                // --- FORCE HIDE ---
                 el.style.display = 'none';
                 el.style.visibility = 'hidden';
                 el.style.opacity = '0';
@@ -84,7 +79,6 @@
 
     function showErrorState(message, errorDetails = '') {
         const errorScreen = elements.error;
-        // This check is safe because init guarantees the element exists.
         const errorHtml = `
             <div class="auth-container">
                 <div class="auth-card">
@@ -99,12 +93,12 @@
         showScreen('error');
     }
     
+    // This function just switches to the auth screen.
+    // The content of the form is managed by auth.js.
     function showAuth() {
         showScreen('auth');
-        // The auth form is now part of the static HTML.
-        // We just need to ensure its event listeners are attached.
         if (S.auth && typeof S.auth.showAuthUI === 'function') {
-            S.auth.showAuthUI(); // This function in auth.js should now only attach events.
+            S.auth.showAuthUI();
         }
     }
 
