@@ -1,318 +1,137 @@
-/* =====================================================
-   SentCor — Chat Module (Discord-style messages)
-   ===================================================== */
+/* SentCor — Chat (Bubble-style) */
 window.S = window.S || {};
 window.S.chat = window.S.chat || {};
+(function(){
+  var sb=null,activeId=null,activeProfile=null,msgs=[],_ch=null,_sub=false,_tt=null,_typing=false;
+  function gS(){if(!sb&&window.S&&window.S.supabase)sb=window.S.supabase;return sb;}
 
-(function () {
-  var supabase = null;
-  var activeFriendId = null;
-  var activeFriendProfile = null;
-  var messages = [];
-  var _channel = null;
-  var _subscribed = false;
-  var _typingTimeout = null;
-  var _isTyping = false;
-
-  function getSupabase() {
-    if (!supabase && window.S && window.S.supabase) supabase = window.S.supabase;
-    return supabase;
+  async function fetchMessages(fid){
+    var u=window.S.auth.getUser();if(!u||!fid){msgs=[];render();return[];}
+    try{var c=gS();if(!c)return[];window.S.ui.showLoading('Загрузка...');
+    var r=await c.from('messages').select('id,sender_id,receiver_id,content,created_at,read,reactions').or('and(sender_id.eq.'+u.id+',receiver_id.eq.'+fid+'),and(sender_id.eq.'+fid+',receiver_id.eq.'+u.id+')').order('created_at',{ascending:true});
+    if(r.error)throw r.error;msgs=r.data||[];
+    msgs.forEach(function(m){if(m.reactions&&typeof m.reactions==='string'){try{m.reactions=JSON.parse(m.reactions);}catch(e){m.reactions={};}}if(!m.reactions)m.reactions={};});
+    render();return msgs;}catch(e){msgs=[];render();return[];}finally{window.S.ui.hideLoading();}
   }
 
-  async function fetchMessages(friendId) {
-    var user = window.S.auth.getUser();
-    if (!user || !friendId) { messages = []; renderMessages(); return []; }
-    try {
-      var client = getSupabase();
-      if (!client) return [];
-      window.S.ui.showLoading('Загрузка сообщений...');
-      var res = await client
-        .from('messages')
-        .select('id, sender_id, receiver_id, content, created_at, read, reactions')
-        .or('and(sender_id.eq.' + user.id + ',receiver_id.eq.' + friendId + '),and(sender_id.eq.' + friendId + ',receiver_id.eq.' + user.id + ')')
-        .order('created_at', { ascending: true });
-      if (res.error) throw res.error;
-      messages = res.data || [];
-      messages.forEach(function (m) {
-        if (m.reactions && typeof m.reactions === 'string') { try { m.reactions = JSON.parse(m.reactions); } catch (e) { m.reactions = {}; } }
-        if (!m.reactions) m.reactions = {};
-      });
-      renderMessages();
-      return messages;
-    } catch (e) {
-      console.error('[SentCor] fetchMessages:', e.message);
-      messages = [];
-      renderMessages();
-      return [];
-    } finally { window.S.ui.hideLoading(); }
+  async function sendMsg(content){
+    var u=window.S.auth.getUser();if(!u||!activeId||!content||!content.trim())return;
+    try{var c=gS();if(!c)return;var r=await c.from('messages').insert({sender_id:u.id,receiver_id:activeId,content:content.trim(),created_at:new Date().toISOString(),read:false,reactions:'{}'});if(r.error)throw r.error;}catch(e){window.S.ui.showToast('Ошибка отправки','error');}
   }
 
-  async function sendMessage(content) {
-    var user = window.S.auth.getUser();
-    if (!user || !activeFriendId) return;
-    if (!content || content.trim() === '') return;
-    try {
-      var client = getSupabase();
-      if (!client) return;
-      var res = await client.from('messages').insert({
-        sender_id: user.id, receiver_id: activeFriendId,
-        content: content.trim(), created_at: new Date().toISOString(),
-        read: false, reactions: '{}'
-      });
-      if (res.error) throw res.error;
-    } catch (e) {
-      console.error('[SentCor] sendMessage:', e.message);
-      window.S.ui.showToast('Не удалось отправить', 'error');
-    }
+  async function addReaction(mid,emoji){
+    var u=window.S.auth.getUser();if(!u)return;
+    try{var c=gS();if(!c)return;var m=msgs.find(function(x){return x.id===mid;});if(!m)return;
+    var r=m.reactions||{};if(!r[emoji])r[emoji]=[];
+    var i=r[emoji].indexOf(u.id);if(i>-1){r[emoji].splice(i,1);if(!r[emoji].length)delete r[emoji];}else{r[emoji].push(u.id);}
+    m.reactions=r;render();await c.from('messages').update({reactions:JSON.stringify(r)}).eq('id',mid);}catch(e){}
   }
 
-  async function addReaction(messageId, emoji) {
-    var user = window.S.auth.getUser();
-    if (!user) return;
-    try {
-      var client = getSupabase();
-      if (!client) return;
-      var msg = messages.find(function (m) { return m.id === messageId; });
-      if (!msg) return;
-      var r = msg.reactions || {};
-      if (!r[emoji]) r[emoji] = [];
-      var idx = r[emoji].indexOf(user.id);
-      if (idx > -1) { r[emoji].splice(idx, 1); if (r[emoji].length === 0) delete r[emoji]; }
-      else { r[emoji].push(user.id); }
-      msg.reactions = r;
-      renderMessages();
-      await client.from('messages').update({ reactions: JSON.stringify(r) }).eq('id', messageId);
-    } catch (e) { console.error('[SentCor] addReaction:', e.message); }
+  async function delMsg(mid){
+    var u=window.S.auth.getUser();if(!u)return;
+    try{var c=gS();if(!c)return;var m=msgs.find(function(x){return x.id===mid;});if(!m||m.sender_id!==u.id)return;
+    await c.from('messages').delete().eq('id',mid);msgs=msgs.filter(function(x){return x.id!==mid;});render();}catch(e){}
   }
 
-  async function deleteMessage(messageId) {
-    var user = window.S.auth.getUser();
-    if (!user) return;
-    try {
-      var client = getSupabase();
-      if (!client) return;
-      var msg = messages.find(function (m) { return m.id === messageId; });
-      if (!msg || msg.sender_id !== user.id) { window.S.ui.showToast('Только свои сообщения', 'error'); return; }
-      await client.from('messages').delete().eq('id', messageId);
-      messages = messages.filter(function (m) { return m.id !== messageId; });
-      renderMessages();
-    } catch (e) { console.error('[SentCor] deleteMessage:', e.message); }
+  function appendMsg(m){
+    if(!m||msgs.some(function(x){return x.id===m.id;}))return;
+    if(m.reactions&&typeof m.reactions==='string'){try{m.reactions=JSON.parse(m.reactions);}catch(e){m.reactions={};}}
+    if(!m.reactions)m.reactions={};msgs.push(m);render();scroll();
   }
 
-  function appendMessage(msg) {
-    if (!msg) return;
-    if (messages.some(function (m) { return m.id === msg.id; })) return;
-    if (msg.reactions && typeof msg.reactions === 'string') { try { msg.reactions = JSON.parse(msg.reactions); } catch (e) { msg.reactions = {}; } }
-    if (!msg.reactions) msg.reactions = {};
-    messages.push(msg);
-    renderMessages();
-    scrollToBottom();
+  function handleTyping(){
+    if(!_typing){_typing=true;try{var c=gS();if(c&&activeId){var u=window.S.auth.getUser();if(u)c.channel('typing:'+activeId+':'+u.id).track({user_id:u.id});}}catch(e){}}
+    if(_tt)clearTimeout(_tt);_tt=setTimeout(function(){_typing=false;},2000);
   }
 
-  function broadcastTyping() {
-    var user = window.S.auth.getUser();
-    if (!user || !activeFriendId) return;
-    try {
-      var client = getSupabase();
-      if (!client) return;
-      client.channel('typing:' + activeFriendId + ':' + user.id)
-        .track({ user_id: user.id });
-    } catch (e) { /* noop */ }
-  }
-
-  function handleTypingInput() {
-    if (!_isTyping) { _isTyping = true; broadcastTyping(); }
-    if (_typingTimeout) clearTimeout(_typingTimeout);
-    _typingTimeout = setTimeout(function () { _isTyping = false; }, 2000);
-  }
-
-  /* -----------------------------------------------------
-     Render messages (Discord-style: grouped, from both sides)
-     ----------------------------------------------------- */
-  function renderMessages() {
-    var container = document.getElementById('chat-messages');
-    if (!container) return;
-    var user = window.S.auth.getUser();
-    if (!user || !activeFriendId) {
-      container.innerHTML = '<div class="messages-spacer"></div>' +
-        '<div class="empty-state"><div class="empty-icon">' + window.S.icons.message + '</div>' +
-        '<div class="empty-title">Выберите диалог</div>' +
-        '<div class="empty-text">Выберите чат слева, чтобы начать общение</div></div>';
+  /* Render bubble-style messages */
+  function render(){
+    var box=document.getElementById('chat-messages');if(!box)return;
+    var u=window.S.auth.getUser();
+    if(!u||!activeId){
+      box.innerHTML='<div class="messages-spacer"></div><div class="empty-state"><div class="empty-icon">'+window.S.icons.message+'</div><div class="empty-title">Выберите диалог</div><div class="empty-text">Выберите чат слева</div></div>';
       return;
     }
-    if (messages.length === 0) {
-      container.innerHTML = '<div class="messages-spacer"></div>' +
-        '<div class="empty-state"><div class="empty-icon">' + window.S.icons.message + '</div>' +
-        '<div class="empty-title">Начните диалог</div>' +
-        '<div class="empty-text">Отправьте первое сообщение!</div></div>';
+    if(!msgs.length){
+      box.innerHTML='<div class="messages-spacer"></div><div class="empty-state"><div class="empty-icon">'+window.S.icons.message+'</div><div class="empty-title">Начните диалог</div><div class="empty-text">Отправьте первое сообщение!</div></div>';
       return;
     }
-
-    var grouped = [];
-    var last = null;
-    messages.forEach(function (msg) {
-      var diff = last && last.msgs.length > 0
-        ? (new Date(msg.created_at) - new Date(last.msgs[last.msgs.length - 1].created_at))
-        : Infinity;
-      if (!last || last.sender_id !== msg.sender_id || diff > 300000) {
-        last = { sender_id: msg.sender_id, msgs: [msg] };
-        grouped.push(last);
+    var html='<div class="messages-spacer"></div>';
+    var lastDate='';
+    msgs.forEach(function(m){
+      var isOwn=m.sender_id===u.id;
+      var prof=isOwn?window.S.auth.getProfile():activeProfile;
+      var uname=prof?prof.username:(isOwn?'Вы':'Пользователь');
+      var avUrl=prof?prof.avatar_url:'';
+      var dh=window.S.utils.getDateHeader(m.created_at);
+      if(dh!==lastDate){html+='<div class="date-divider"><span>'+window.S.utils.escapeHtml(dh)+'</span></div>';lastDate=dh;}
+      var time=window.S.utils.formatTime(m.created_at);
+      var esc=window.S.utils.escapeHtml(m.content);
+      var rHTML=renderR(m);
+      if(isOwn){
+        html+='<div class="bubble-row bubble-row--own" data-msg-id="'+m.id+'">'+
+          '<div class="bubble-actions"><button class="ba-btn" data-act="react" data-mid="'+m.id+'">'+window.S.icons.smile+'</button>'+
+          '<button class="ba-btn ba-danger" data-act="del" data-mid="'+m.id+'">'+window.S.icons.trash+'</button></div>'+
+          '<div class="bubble bubble--own"><div class="bubble-text">'+esc+'</div><div class="bubble-time">'+time+'</div></div></div>';
       } else {
-        last.msgs.push(msg);
-      }
-    });
-
-    var html = '<div class="messages-spacer"></div>';
-    var lastDate = '';
-    grouped.forEach(function (g) {
-      var m0 = g.msgs[0];
-      var isOwn = m0.sender_id === user.id;
-      var profile = isOwn ? window.S.auth.getProfile() : activeFriendProfile;
-      var uname = profile ? profile.username : (isOwn ? 'Вы' : 'Пользователь');
-      var avatarUrl = profile ? profile.avatar_url : '';
-      var dateLabel = window.S.utils.getDateHeader(m0.created_at);
-
-      if (dateLabel !== lastDate) {
-        html += '<div class="date-divider"><span>' + window.S.utils.escapeHtml(dateLabel) + '</span></div>';
-        lastDate = dateLabel;
-      }
-
-      html += '<div class="msg-group ' + (isOwn ? 'msg-group--own' : '') + '">' +
-        '<div class="msg-avatar">' + window.S.utils.createAvatarHTML(uname, avatarUrl, 40) + '</div>' +
-        '<div class="msg-body">' +
-        '<div class="msg-header">' +
-        '<span class="msg-author">' + window.S.utils.escapeHtml(uname) + '</span>' +
-        '<span class="msg-time">' + window.S.utils.formatTime(m0.created_at) + '</span>' +
-        '</div>';
-
-      g.msgs.forEach(function (msg) {
-        var escaped = window.S.utils.escapeHtml(msg.content);
-        var isOwnMsg = msg.sender_id === user.id;
-        var rHTML = renderReactions(msg);
-        html += '<div class="msg-line" data-msg-id="' + msg.id + '">' +
-          '<div class="msg-text">' + escaped + '</div>' +
-          '<div class="msg-hover-actions">' +
-          '<button class="msg-action" data-action="react" data-msg-id="' + msg.id + '" title="Реакция">' + window.S.icons.smile + '</button>' +
-          (isOwnMsg ? '<button class="msg-action msg-action--danger" data-action="delete" data-msg-id="' + msg.id + '" title="Удалить">' + window.S.icons.trash + '</button>' : '') +
+        html+='<div class="bubble-row bubble-row--friend" data-msg-id="'+m.id+'">'+
+          '<div class="bubble-av">'+window.S.utils.createAvatarHTML(uname,avUrl,36)+'</div>'+
+          '<div class="bubble-col"><div class="bubble-author">'+window.S.utils.escapeHtml(uname)+'</div>'+
+          '<div class="bubble bubble--friend"><div class="bubble-text">'+esc+'</div><div class="bubble-time">'+time+'</div></div>'+
+          '<div class="bubble-actions-inline"><button class="ba-btn" data-act="react" data-mid="'+m.id+'">'+window.S.icons.smile+'</button></div>'+
           '</div></div>';
-        if (rHTML) html += '<div class="msg-reactions">' + rHTML + '</div>';
-      });
-
-      html += '</div></div>';
+      }
+      if(rHTML)html+='<div class="bubble-reactions">'+rHTML+'</div>';
     });
-
-    container.innerHTML = html;
-    scrollToBottom();
-    bindMessageActions();
+    box.innerHTML=html;scroll();bindActions();
   }
 
-  function renderReactions(msg) {
-    var r = msg.reactions || {};
-    var user = window.S.auth.getUser();
-    var html = '';
-    Object.keys(r).forEach(function (emoji) {
-      var ids = r[emoji];
-      if (!ids || ids.length === 0) return;
-      var active = user && ids.indexOf(user.id) > -1;
-      html += '<button class="reaction ' + (active ? 'reaction--active' : '') + '" data-msg-id="' + msg.id + '" data-emoji="' + emoji + '">' +
-        emoji + ' <span>' + ids.length + '</span></button>';
-    });
-    return html;
+  function renderR(m){
+    var r=m.reactions||{};var u=window.S.auth.getUser();var h='';
+    Object.keys(r).forEach(function(e){var ids=r[e];if(!ids||!ids.length)return;var a=u&&ids.indexOf(u.id)>-1;
+    h+='<button class="reaction'+(a?' reaction--active':'')+'" data-mid="'+m.id+'" data-emoji="'+e+'">'+e+' <span>'+ids.length+'</span></button>';});
+    return h;
   }
 
-  function bindMessageActions() {
-    var container = document.getElementById('chat-messages');
-    if (!container) return;
-    container.querySelectorAll('.msg-line').forEach(function (el) {
-      el.addEventListener('mouseenter', function () { el.classList.add('msg-line--hover'); });
-      el.addEventListener('mouseleave', function () { el.classList.remove('msg-line--hover'); });
-    });
-    container.querySelectorAll('[data-action="delete"]').forEach(function (btn) {
-      btn.addEventListener('click', function (e) { e.stopPropagation(); deleteMessage(btn.getAttribute('data-msg-id')); });
-    });
-    container.querySelectorAll('[data-action="react"]').forEach(function (btn) {
-      btn.addEventListener('click', function (e) {
-        e.stopPropagation();
-        var msgId = btn.getAttribute('data-msg-id');
-        window.S.ui.showEmojiPicker(btn, function (emoji) { addReaction(msgId, emoji); });
-      });
-    });
-    container.querySelectorAll('.reaction').forEach(function (chip) {
-      chip.addEventListener('click', function () {
-        addReaction(chip.getAttribute('data-msg-id'), chip.getAttribute('data-emoji'));
-      });
-    });
+  function bindActions(){
+    var box=document.getElementById('chat-messages');if(!box)return;
+    box.querySelectorAll('[data-act="del"]').forEach(function(b){b.addEventListener('click',function(e){e.stopPropagation();delMsg(b.getAttribute('data-mid'));});});
+    box.querySelectorAll('[data-act="react"]').forEach(function(b){b.addEventListener('click',function(e){e.stopPropagation();var mid=b.getAttribute('data-mid');window.S.ui.showEmojiPicker(b,function(em){addReaction(mid,em);});});});
+    box.querySelectorAll('.reaction').forEach(function(c){c.addEventListener('click',function(){addReaction(c.getAttribute('data-mid'),c.getAttribute('data-emoji'));});});
   }
 
-  function scrollToBottom() {
-    var c = document.getElementById('chat-messages');
-    if (c) requestAnimationFrame(function () { c.scrollTop = c.scrollHeight; });
+  function scroll(){var b=document.getElementById('chat-messages');if(b)requestAnimationFrame(function(){b.scrollTop=b.scrollHeight;});}
+
+  async function markRead(fid){
+    var u=window.S.auth.getUser();if(!u||!fid)return;
+    try{var c=gS();if(!c)return;await c.from('messages').update({read:true}).eq('sender_id',fid).eq('receiver_id',u.id).eq('read',false);}catch(e){}
   }
 
-  async function markRead(friendId) {
-    var user = window.S.auth.getUser();
-    if (!user || !friendId) return;
-    try {
-      var client = getSupabase();
-      if (!client) return;
-      await client.from('messages').update({ read: true }).eq('sender_id', friendId).eq('receiver_id', user.id).eq('read', false);
-    } catch (e) { /* noop */ }
+  function subRT(){
+    if(_sub)return;try{var c=gS();if(!c)return;
+    _ch=c.channel('public:messages')
+      .on('postgres_changes',{event:'INSERT',schema:'public',table:'messages'},function(p){
+        var m=p.new;if(window.S.chat.activeId&&(m.sender_id===window.S.chat.activeId||m.receiver_id===window.S.chat.activeId)){window.S.chat.appendMsg(m);var u=window.S.auth.getUser();if(u&&m.sender_id===window.S.chat.activeId)markRead(window.S.chat.activeId);}
+        if(window.S.app&&window.S.app.refreshConversations)window.S.app.refreshConversations();
+      })
+      .on('postgres_changes',{event:'UPDATE',schema:'public',table:'messages'},function(p){
+        var m=p.new;if(window.S.chat.activeId&&(m.sender_id===window.S.chat.activeId||m.receiver_id===window.S.chat.activeId)){
+          var i=msgs.findIndex(function(x){return x.id===m.id;});if(i>-1){if(m.reactions&&typeof m.reactions==='string'){try{m.reactions=JSON.parse(m.reactions);}catch(e){m.reactions={};}}msgs[i]=m;render();}
+        }
+      }).subscribe();_sub=true;}catch(e){}
   }
 
-  function subscribeRealtime() {
-    if (_subscribed) return;
-    try {
-      var client = getSupabase();
-      if (!client) return;
-      _channel = client.channel('public:messages')
-        .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages' }, function (payload) {
-          var msg = payload.new;
-          if (window.S.chat.activeFriendId &&
-            (msg.sender_id === window.S.chat.activeFriendId || msg.receiver_id === window.S.chat.activeFriendId)) {
-            window.S.chat.appendMessage(msg);
-            var user = window.S.auth.getUser();
-            if (user && msg.sender_id === window.S.chat.activeFriendId) markRead(window.S.chat.activeFriendId);
-          }
-          if (window.S.app && window.S.app.refreshConversations) window.S.app.refreshConversations();
-        })
-        .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'messages' }, function (payload) {
-          var msg = payload.new;
-          if (window.S.chat.activeFriendId &&
-            (msg.sender_id === window.S.chat.activeFriendId || msg.receiver_id === window.S.chat.activeFriendId)) {
-            var idx = messages.findIndex(function (m) { return m.id === msg.id; });
-            if (idx > -1) {
-              if (msg.reactions && typeof msg.reactions === 'string') { try { msg.reactions = JSON.parse(msg.reactions); } catch (e) { msg.reactions = {}; } }
-              messages[idx] = msg;
-              renderMessages();
-            }
-          }
-        }).subscribe();
-      _subscribed = true;
-    } catch (e) { console.warn('[SentCor] chat realtime:', e.message); }
-  }
-
-  function unsubscribeRealtime() {
-    if (_channel && getSupabase()) { try { getSupabase().removeChannel(_channel); } catch (e) { /* noop */ } }
-    _channel = null; _subscribed = false;
-  }
-
-  window.S.chat.fetchMessages = fetchMessages;
-  window.S.chat.sendMessage = sendMessage;
-  window.S.chat.appendMessage = appendMessage;
-  window.S.chat.addReaction = addReaction;
-  window.S.chat.deleteMessage = deleteMessage;
-  window.S.chat.markRead = markRead;
-  window.S.chat.renderMessages = renderMessages;
-  window.S.chat.subscribeRealtime = subscribeRealtime;
-  window.S.chat.unsubscribeRealtime = unsubscribeRealtime;
-  window.S.chat.handleTypingInput = handleTypingInput;
-  window.S.chat.setActiveFriend = function (id, profile) {
-    activeFriendId = id;
-    activeFriendProfile = profile || null;
-    window.S.chat.activeFriendId = id;
-    if (id) markRead(id);
-  };
-  window.S.chat.getActiveFriend = function () { return activeFriendId; };
-  window.S.chat.getActiveFriendProfile = function () { return activeFriendProfile; };
-  window.S.chat.getMessages = function () { return messages; };
+  window.S.chat.fetchMessages=fetchMessages;
+  window.S.chat.sendMessage=sendMsg;
+  window.S.chat.appendMsg=appendMsg;
+  window.S.chat.addReaction=addReaction;
+  window.S.chat.deleteMessage=delMsg;
+  window.S.chat.markRead=markRead;
+  window.S.chat.render=render;
+  window.S.chat.subscribeRealtime=subRT;
+  window.S.chat.handleTypingInput=handleTyping;
+  window.S.chat.setActive=function(id,prof){activeId=id;activeProfile=prof||null;window.S.chat.activeId=id;if(id)markRead(id);};
+  window.S.chat.getActive=function(){return activeId;};
+  window.S.chat.getActiveProfile=function(){return activeProfile;};
+  window.S.chat.getMessages=function(){return msgs;};
 })();

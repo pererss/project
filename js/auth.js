@@ -1,165 +1,54 @@
-/* =====================================================
-   SentCor — Authentication Module
-   ===================================================== */
+/* SentCor — Auth */
 window.S = window.S || {};
 window.S.auth = window.S.auth || {};
-
-(function () {
-  var supabase = null;
-  var currentUser = null;
-  var currentProfile = null;
-  var isLoginMode = true;
-
-  function getSupabase() {
-    if (!supabase && window.S && window.S.supabase) supabase = window.S.supabase;
-    return supabase;
+(function(){
+  var sb=null,user=null,profile=null,isLogin=true;
+  function gS(){if(!sb&&window.S&&window.S.supabase)sb=window.S.supabase;return sb;}
+  var $as,$ms,$em,$pw,$un,$btn,$tog,$err;
+  function cD(){$as=document.getElementById('auth-screen');$ms=document.getElementById('main-app-screen');$em=document.getElementById('auth-email');$pw=document.getElementById('auth-password');$un=document.getElementById('auth-username');$btn=document.getElementById('auth-submit');$tog=document.getElementById('auth-toggle');$err=document.getElementById('auth-error');}
+  function showErr(m){if($err){$err.textContent=m;$err.style.display='block';}window.S.ui.showToast(m,'error');}
+  function hideErr(){if($err){$err.textContent='';$err.style.display='none';}}
+  function toggle(){isLogin=!isLogin;hideErr();if($un)$un.style.display=isLogin?'none':'block';if($btn)$btn.textContent=isLogin?'Войти':'Зарегистрироваться';if($tog)$tog.innerHTML=isLogin?'Нет аккаунта? <span class="auth-link">Зарегистрироваться</span>':'Уже есть аккаунт? <span class="auth-link">Войти</span>';}
+  async function submit(){
+    hideErr();
+    var e=($em?$em.value:'').trim(),p=($pw?$pw.value:'').trim(),u=($un?$un.value:'').trim();
+    if(!e||!p){showErr('Заполните email и пароль');return;}
+    if(!isLogin&&!u){showErr('Введите логин');return;}
+    if(p.length<6){showErr('Минимум 6 символов');return;}
+    if(!isLogin&&u.length<3){showErr('Логин минимум 3 символа');return;}
+    window.S.ui.showLoading(isLogin?'Вход...':'Регистрация...');
+    try{
+      var c=gS();if(!c)throw new Error('Supabase не инициализирован');
+      var r;
+      if(isLogin){r=await c.auth.signInWithPassword({email:e,password:p});}
+      else{r=await c.auth.signUp({email:e,password:p});if(r.data&&r.data.user&&!r.error){await c.from('profiles').upsert({id:r.data.user.id,username:u,email:e,avatar_url:'',status:'online',bio:'',created_at:new Date().toISOString()},{onConflict:'id'});}}
+      if(r.error)throw r.error;
+      user=r.data.user;await fetchP();
+      window.S.ui.showToast(isLogin?'Добро пожаловать!':'Аккаунт создан!','success');
+      window.S.auth.onAuthSuccess(user);
+    }catch(err){var m=(err&&err.message)?err.message:'Ошибка';if(m.includes('Invalid login'))m='Неверный email или пароль';if(m.includes('already registered'))m='Email уже зарегистрирован';showErr(m);}
+    finally{window.S.ui.hideLoading();}
   }
-
-  var $authScreen, $mainScreen, $email, $password, $username, $authBtn, $authToggleBtn, $authError;
-
-  function cacheDom() {
-    $authScreen = document.getElementById('auth-screen');
-    $mainScreen = document.getElementById('main-app-screen');
-    $email = document.getElementById('auth-email');
-    $password = document.getElementById('auth-password');
-    $username = document.getElementById('auth-username');
-    $authBtn = document.getElementById('auth-submit');
-    $authToggleBtn = document.getElementById('auth-toggle');
-    $authError = document.getElementById('auth-error');
+  async function fetchP(){
+    if(!user)return null;
+    try{var c=gS();if(!c)return null;var r=await c.from('profiles').select('id,username,avatar_url,status,email,bio').eq('id',user.id).single();if(r.data)profile=r.data;}catch(e){console.warn('[SentCor] fetchProfile:',e.message);}
+    return profile;
   }
-
-  function showAuthError(msg) {
-    if ($authError) { $authError.textContent = msg; $authError.style.display = 'block'; }
-    window.S.ui.showToast(msg, 'error');
-  }
-  function hideAuthError() { if ($authError) { $authError.textContent = ''; $authError.style.display = 'none'; } }
-
-  function toggleMode() {
-    isLoginMode = !isLoginMode;
-    hideAuthError();
-    if ($username) $username.style.display = isLoginMode ? 'none' : 'block';
-    if ($authBtn) $authBtn.textContent = isLoginMode ? 'Войти' : 'Зарегистрироваться';
-    if ($authToggleBtn) {
-      $authToggleBtn.innerHTML = isLoginMode
-        ? 'Нет аккаунта? <span class="auth-link">Зарегистрироваться</span>'
-        : 'Уже есть аккаунт? <span class="auth-link">Войти</span>';
-    }
-  }
-
-  async function handleSubmit() {
-    hideAuthError();
-    var email = ($email ? $email.value : '').trim();
-    var password = ($password ? $password.value : '').trim();
-    var uname = ($username ? $username.value : '').trim();
-    if (!email || !password) { showAuthError('Заполните email и пароль'); return; }
-    if (!isLoginMode && !uname) { showAuthError('Введите логин'); return; }
-    if (password.length < 6) { showAuthError('Пароль должен быть не менее 6 символов'); return; }
-    if (!isLoginMode && uname.length < 3) { showAuthError('Логин минимум 3 символа'); return; }
-
-    window.S.ui.showLoading(isLoginMode ? 'Вход...' : 'Регистрация...');
-    try {
-      var client = getSupabase();
-      if (!client) throw new Error('Supabase не инициализирован');
-      var result;
-      if (isLoginMode) {
-        result = await client.auth.signInWithPassword({ email: email, password: password });
-      } else {
-        result = await client.auth.signUp({ email: email, password: password });
-        if (result.data && result.data.user && !result.error) {
-          await client.from('profiles').upsert({
-            id: result.data.user.id, username: uname, email: email,
-            avatar_url: '', status: 'online', bio: '', created_at: new Date().toISOString()
-          }, { onConflict: 'id' });
-        }
-      }
-      if (result.error) throw result.error;
-      currentUser = result.data.user;
-      await fetchProfile();
-      window.S.ui.showToast(isLoginMode ? 'Добро пожаловать!' : 'Аккаунт создан!', 'success');
-      window.S.auth.onAuthSuccess(currentUser);
-    } catch (err) {
-      var msg = (err && err.message) ? err.message : 'Ошибка';
-      if (msg.includes('Invalid login')) msg = 'Неверный email или пароль';
-      if (msg.includes('already registered')) msg = 'Email уже зарегистрирован';
-      showAuthError(msg);
-    } finally {
-      window.S.ui.hideLoading();
-    }
-  }
-
-  async function fetchProfile() {
-    if (!currentUser) return null;
-    try {
-      var client = getSupabase();
-      if (!client) return null;
-      var res = await client.from('profiles').select('id, username, avatar_url, status, email, bio').eq('id', currentUser.id).single();
-      if (res.data) currentProfile = res.data;
-    } catch (e) { console.warn('[SentCor] fetchProfile:', e.message); }
-    return currentProfile;
-  }
-
-  async function checkSession() {
-    try {
-      var client = getSupabase();
-      if (!client) return null;
-      var res = await client.auth.getSession();
-      if (res.data && res.data.session && res.data.session.user) {
-        currentUser = res.data.session.user;
-        await fetchProfile();
-        window.S.auth.onAuthSuccess(currentUser);
-        return currentUser;
-      }
-    } catch (e) { console.warn('[SentCor] Session check:', e.message); }
+  async function check(){
+    try{var c=gS();if(!c)return null;var r=await c.auth.getSession();if(r.data&&r.data.session&&r.data.session.user){user=r.data.session.user;await fetchP();window.S.auth.onAuthSuccess(user);return user;}}catch(e){console.warn('[SentCor] Session:',e.message);}
     return null;
   }
-
-  async function logout() {
-    try {
-      var client = getSupabase();
-      if (client && currentUser) {
-        await client.from('profiles').upsert({ id: currentUser.id, status: 'offline' }, { onConflict: 'id' });
-        await client.auth.signOut();
-      }
-    } catch (e) { console.warn('[SentCor] Logout:', e.message); }
-    currentUser = null;
-    currentProfile = null;
-    if ($authScreen) $authScreen.classList.add('active');
-    if ($mainScreen) $mainScreen.classList.remove('active');
-    window.S.ui.showToast('Вы вышли', 'info');
+  async function logout(){
+    try{var c=gS();if(c&&user){await c.from('profiles').upsert({id:user.id,status:'offline'},{onConflict:'id'});await c.auth.signOut();}}catch(e){}
+    user=null;profile=null;
+    if($as)$as.classList.add('active');if($ms)$ms.classList.remove('active');
+    window.S.ui.showToast('Вы вышли','info');
   }
-
-  window.S.auth.init = function () {
-    cacheDom();
-    if ($authToggleBtn) $authToggleBtn.addEventListener('click', toggleMode);
-    if ($authBtn) $authBtn.addEventListener('click', handleSubmit);
-    [$password, $email, $username].forEach(function (el) {
-      if (el) el.addEventListener('keydown', function (e) { if (e.key === 'Enter') handleSubmit(); });
-    });
-    if ($username) $username.style.display = 'none';
-    toggleMode();
-    checkSession();
-  };
-
-  window.S.auth.onAuthSuccess = function (user) {
-    currentUser = user;
-    if ($authScreen) $authScreen.classList.remove('active');
-    if ($mainScreen) $mainScreen.classList.add('active');
-    if (window.S.app && window.S.app.onLogin) window.S.app.onLogin(user);
-  };
-
-  window.S.auth.logout = logout;
-  window.S.auth.getUser = function () { return currentUser; };
-  window.S.auth.getProfile = function () { return currentProfile; };
-  window.S.auth.fetchProfile = fetchProfile;
-  window.S.auth.updateProfile = async function (data) {
-    if (!currentUser) return { error: 'Не авторизован' };
-    try {
-      var client = getSupabase();
-      if (!client) return { error: 'Supabase не инициализирован' };
-      var res = await client.from('profiles').upsert(Object.assign({ id: currentUser.id }, data), { onConflict: 'id' });
-      if (res.error) throw res.error;
-      await fetchProfile();
-      return { success: true };
-    } catch (e) { return { error: e.message }; }
-  };
+  window.S.auth.init=function(){cD();if($tog)$tog.addEventListener('click',toggle);if($btn)$btn.addEventListener('click',submit);[$pw,$em,$un].forEach(function(el){if(el)el.addEventListener('keydown',function(e){if(e.key==='Enter')submit();});});if($un)$un.style.display='none';toggle();check();};
+  window.S.auth.onAuthSuccess=function(u){user=u;if($as)$as.classList.remove('active');if($ms)$ms.classList.add('active');if(window.S.app&&window.S.app.onLogin)window.S.app.onLogin(u);};
+  window.S.auth.logout=logout;
+  window.S.auth.getUser=function(){return user;};
+  window.S.auth.getProfile=function(){return profile;};
+  window.S.auth.fetchProfile=fetchP;
+  window.S.auth.updateProfile=async function(d){if(!user)return{error:'Не авторизован'};try{var c=gS();if(!c)return{error:'No supabase'};var r=await c.from('profiles').upsert(Object.assign({id:user.id},d),{onConflict:'id'});if(r.error)throw r.error;await fetchP();return{success:true};}catch(e){return{error:e.message};}};
 })();
