@@ -1,12 +1,12 @@
-// SENTCOR v16.0 — Resilient & Feature-Rich UI Engine
+// SENTCOR v17.0 — Robust Screen Manager & UI Engine
 (function() {
     "use strict";
 
     window.S = window.SENTCOR = window.S || {};
     const S = window.S;
 
-    let uiReady = false;
     const elements = {};
+    const screenIds = ['loading', 'error', 'auth', 'main-app'];
 
     function escapeHtml(str) {
         if (typeof str !== 'string') return '';
@@ -21,6 +21,10 @@
         }
     }
 
+    /**
+     * Initializes the UI shell, creating containers for all major screens.
+     * This ensures a consistent structure for the screen manager.
+     */
     function init() {
         const appContainer = document.getElementById("app");
         if (!appContainer) {
@@ -29,38 +33,70 @@
             return;
         }
 
+        // Create all screen containers at once
         appContainer.innerHTML = `
-            <div id="loading-screen" class="screen"><div class="spinner"></div></div>
-            <div id="error-screen" class="screen"></div>
-            <div id="auth-screen" class="screen"></div>
-            <div id="main-app-screen" class="screen"></div>
+            <div id="loading-screen" class="screen hidden">
+                <div class="auth-container"><div class="spinner"></div></div>
+            </div>
+            <div id="error-screen" class="screen hidden"></div>
+            <div id="auth-screen" class="screen hidden"></div>
+            <div id="main-app-screen" class="screen hidden"></div>
         `;
 
+        // Cache element references
+        screenIds.forEach(id => {
+            elements[id] = document.getElementById(`${id}-screen`);
+        });
         elements.app = appContainer;
-        elements.loadingScreen = document.getElementById("loading-screen");
-        elements.errorScreen = document.getElementById("error-screen");
-        elements.authScreen = document.getElementById("auth-screen");
-        elements.mainAppScreen = document.getElementById("main-app-screen");
         
-        uiReady = true;
         console.log("[UI] Engine Initialized & Shell Ready");
     }
 
-    function switchScreen(screenId) {
-        if (!uiReady) {
-            console.warn("[UI] Attempted to switch screen before UI was ready. Call will be ignored.");
+    /**
+     * The core screen management function.
+     * Hides all screens and then shows only the target screen.
+     * @param {string} screenToShow - The key of the screen to show (e.g., 'loading', 'auth').
+     */
+    function showScreen(screenToShow) {
+        if (!elements[screenToShow]) {
+            console.error(`[UI] Screen "${screenToShow}" does not exist.`);
             return;
         }
-        
-        const allScreens = elements.app.querySelectorAll('.screen');
-        allScreens.forEach(screen => screen.classList.remove('active'));
 
-        const targetScreen = document.getElementById(screenId);
-        if (targetScreen) {
-            targetScreen.classList.add('active');
+        console.log(`[UI] Switching to screen: ${screenToShow}`);
+
+        // Hide all screens
+        screenIds.forEach(id => {
+            if (elements[id]) {
+                elements[id].classList.add('hidden');
+            }
+        });
+
+        // Show the target screen
+        elements[screenToShow].classList.remove('hidden');
+    }
+
+    function showErrorState(message) {
+        if (elements.error) {
+            elements.error.innerHTML = `
+                <div class="auth-container">
+                    <div class="auth-card">
+                        <h1 class="auth-title">Критическая ошибка</h1>
+                        <p class="text-muted">${escapeHtml(message)}</p>
+                        <button class="btn btn-primary" onclick="window.location.reload()">Перезагрузить</button>
+                    </div>
+                </div>`;
+            showScreen('error');
+        }
+    }
+    
+    function showAuth() {
+        // This function now acts as a proxy.
+        // It ensures the auth screen is shown and calls the content renderer from the auth module.
+        if (S.auth && typeof S.auth.showAuthUI === 'function') {
+            S.auth.showAuthUI(); // This will handle content and visibility
         } else {
-            console.error(`[UI] Screen with ID "${screenId}" not found.`);
-            showErrorState(`Ошибка интерфейса: экран "${screenId}" не найден.`);
+            showErrorState("Модуль авторизации не загружен.");
         }
     }
 
@@ -88,9 +124,7 @@
         const target = typeof elementOrSelector === 'string' ? document.querySelector(elementOrSelector) : elementOrSelector;
         if (!target) return;
         const badge = target.querySelector('.notification-badge');
-        if (badge) {
-            badge.remove();
-        }
+        if (badge) badge.remove();
     }
     
     function createMemberItem(member) {
@@ -116,16 +150,11 @@
     S.ui = {
         init,
         onReady,
-        switchScreen,
-        showLoadingScreen: () => switchScreen('loading-screen'),
-        showErrorState: (message) => {
-            if (elements.errorScreen) {
-                elements.errorScreen.innerHTML = `<div class="auth-container"><h1>Критическая ошибка</h1><p class="text-muted">${escapeHtml(message)}</p><button class="btn btn-primary" onclick="window.location.reload()">Перезагрузить</button></div>`;
-                switchScreen('error-screen');
-            }
-        },
-        showAuth: () => switchScreen('auth-screen'),
-        showApp: () => switchScreen('main-app-screen'),
+        showScreen,
+        showLoadingScreen: () => showScreen('loading'),
+        showErrorState,
+        showAuth,
+        showApp: () => showScreen('main-app'),
         addBadge,
         removeBadge,
         escapeHtml,
