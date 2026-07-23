@@ -1,4 +1,4 @@
-// SENTCOR v18.0 — Bulletproof Screen Manager with Direct Style Manipulation
+// SENTCOR v19.0 — Ultimate Screen Manager
 (function() {
     "use strict";
 
@@ -8,11 +8,6 @@
     const elements = {};
     const screenIds = ['loading', 'error', 'auth', 'main-app'];
 
-    function escapeHtml(str) {
-        if (typeof str !== 'string') return '';
-        return str.replace(/[&<>"']/g, m => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[m]));
-    }
-
     function onReady(fn) {
         if (document.readyState !== 'loading') {
             fn();
@@ -21,74 +16,95 @@
         }
     }
 
+    /**
+     * Initializes the UI by caching references to pre-existing DOM elements.
+     * The HTML structure is now defined declaratively in index.html.
+     */
     function init() {
-        const appContainer = document.getElementById("app");
-        if (!appContainer) {
-            console.error("[UI] Critical error: #app container not found!");
-            document.body.innerHTML = '<div style="color:white;text-align:center;padding-top:20%;">[UI] Critical error: #app container not found!</div>';
-            return;
-        }
-
-        appContainer.innerHTML = `
-            <div id="loading-screen" class="screen" style="display: none;"><div class="auth-container"><div class="spinner"></div></div></div>
-            <div id="error-screen" class="screen" style="display: none;"></div>
-            <div id="auth-screen" class="screen" style="display: none;"></div>
-            <div id="main-app-screen" class="screen" style="display: none;"></div>
-        `;
-
+        let allFound = true;
         screenIds.forEach(id => {
-            elements[id] = document.getElementById(`${id}-screen`);
+            const el = document.getElementById(`${id}-screen`);
+            if (el) {
+                elements[id] = el;
+            } else {
+                console.error(`[UI] Critical init failure: Screen element #${id}-screen not found in DOM.`);
+                allFound = false;
+            }
         });
-        elements.app = appContainer;
-        
-        console.log("[UI] Engine Initialized & Shell Ready");
+
+        if (allFound) {
+            console.log("[UI] Engine Initialized & all screen elements cached.");
+        } else {
+            document.body.innerHTML = '<div style="color:white;text-align:center;padding-top:20%;">UI Initialization Failed: A screen element is missing.</div>';
+        }
     }
 
     /**
-     * The core screen management function.
-     * Hides all screens and then shows only the target screen using direct style manipulation.
+     * The definitive screen management function.
+     * Aggressively hides all other screens and shows only the target screen.
      * @param {string} screenToShow - The key of the screen to show (e.g., 'loading', 'auth').
      */
     function showScreen(screenToShow) {
         if (!elements[screenToShow]) {
-            console.error(`[UI] Screen "${screenToShow}" does not exist.`);
+            console.error(`[UI] Cannot show screen: "${screenToShow}" does not exist or was not cached.`);
             return;
         }
 
-        console.log(`[UI] Switching to screen: ${screenToShow}`);
+        console.log(`[UI] Activating screen: ${screenToShow}`);
 
-        // Hide all screens using direct style manipulation for reliability
         screenIds.forEach(id => {
-            if (elements[id] && elements[id].style) {
-                elements[id].style.display = 'none';
+            const el = elements[id];
+            if (!el) return;
+
+            if (id === screenToShow) {
+                // --- FORCE SHOW ---
+                el.style.display = 'flex';
+                el.style.visibility = 'visible';
+                el.style.opacity = '1';
+                el.style.zIndex = '1000'; // High z-index to ensure it's on top
+                el.style.pointerEvents = 'auto';
+            } else {
+                // --- FORCE HIDE ---
+                el.style.display = 'none';
+                el.style.visibility = 'hidden';
+                el.style.opacity = '0';
+                el.style.zIndex = '-1'; // Move it behind
+                el.style.pointerEvents = 'none';
             }
         });
-
-        // Show the target screen. 'flex' is a good default for centering containers.
-        elements[screenToShow].style.display = 'flex';
     }
 
     function showErrorState(message, errorDetails = '') {
-        if (elements.error) {
-            elements.error.innerHTML = `
+        const errorScreen = elements.error;
+        if (errorScreen) {
+            const errorHtml = `
                 <div class="auth-container">
                     <div class="auth-card">
                         <h1 class="auth-title">Критическая ошибка</h1>
-                        <p class="text-muted">${escapeHtml(message)}</p>
+                        <p class="text-muted">${S.ui.escapeHtml(message)}</p>
                         <button class="btn btn-primary" onclick="window.location.reload()">Перезагрузить</button>
                     </div>
                 </div>`;
+            errorScreen.innerHTML = errorHtml;
             console.error(`[UI] Displaying error state: ${message}`, errorDetails);
             showScreen('error');
         }
     }
     
     function showAuth() {
+        // Since the auth form is now in index.html, this just needs to switch the screen.
+        // The event listeners will be attached by auth.js.
+        showScreen('auth');
+        
+        // Re-trigger event binding in auth.js to be safe
         if (S.auth && typeof S.auth.showAuthUI === 'function') {
             S.auth.showAuthUI();
-        } else {
-            showErrorState("Модуль авторизации не загружен.", "S.auth.showAuthUI is not a function.");
         }
+    }
+
+    function escapeHtml(str) {
+        if (typeof str !== 'string') return '';
+        return str.replace(/[&<>"']/g, m => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[m]));
     }
 
     // --- Public API ---
@@ -101,7 +117,6 @@
         showAuth,
         showApp: () => showScreen('main-app'),
         escapeHtml,
-        // Badge and helper functions are omitted for brevity as they are unchanged
     };
 
 })();

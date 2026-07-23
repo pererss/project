@@ -7,32 +7,66 @@
   <meta name="description" content="SENTCOR — игровой мессенджер с голосовыми чатами, серверами и друзьями." />
   <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🎮</text></svg>" />
   
-  <!-- Main Monochrome Theme -->
   <link rel="stylesheet" href="css/theme-monochrome.css" />
-
-  <!-- Font Awesome 6 -->
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" />
-  
-  <!-- SDKs -->
+
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="https://cdn.jsdelivr.net/npm/livekit-client@2/dist/livekit-client.umd.min.js"></script>
 
-  <!-- Core SENTCOR Initializer -->
   <script>
     window.S = window.SENTCOR = window.S || {};
   </script>
 </head>
 <body>
-  <div id="app"></div>
+
+  <!-- Declarative Screen Structure -->
+  <div id="app">
+    <!-- Loading Screen (Visible by default) -->
+    <div id="loading-screen" class="screen" style="display: flex; justify-content: center; align-items: center; opacity: 1; z-index: 9999;">
+        <div class="spinner"></div>
+    </div>
+
+    <!-- Auth Screen (Hidden by default) -->
+    <div id="auth-screen" class="screen" style="display: none;">
+        <div class="auth-container">
+            <div class="auth-card">
+                <div class="auth-header">
+                    <h1 class="auth-title">SENTCOR</h1>
+                    <p class="auth-subtitle">Вход в игровой мессенджер</p>
+                </div>
+                <div id="auth-error-message" class="auth-error-message"></div>
+                <form id="auth-form">
+                    <div class="input-group">
+                        <label for="email">Email</label>
+                        <input type="email" id="email" name="email" required autocomplete="email">
+                    </div>
+                    <div class="input-group">
+                        <label for="password">Пароль</label>
+                        <input type="password" id="password" name="password" required autocomplete="current-password">
+                    </div>
+                    <button type="submit" class="btn btn-primary btn-block">Войти</button>
+                </form>
+                <div class="auth-footer">
+                    <p>Нет аккаунта? <a href="#" id="show-signup-link">Создать</a></p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Main App Screen (Hidden by default) -->
+    <div id="main-app-screen" class="screen" style="display: none;">
+        <!-- Main application content will be rendered here -->
+    </div>
+
+    <!-- Error Screen (Hidden by default) -->
+    <div id="error-screen" class="screen" style="display: none;">
+        <!-- Error content will be rendered here by ui.js -->
+    </div>
+  </div>
+
   <div id="toast-container"></div>
 
-  <!-- 
-    Core Module Loading Order:
-    1. config.js & supabase.js: Base configuration.
-    2. ui.js: Manages all DOM interactions and must define S.ui and S.ui.onReady.
-    3. toast.js, auth.js, connection.js: Core services that depend on the base S object.
-    4. Feature modules: Depend on core services.
-  -->
+  <!-- Core Module Loading Order -->
   <script src="js/config.js"></script>
   <script src="js/supabase.js"></script>
   <script src="js/ui.js"></script>
@@ -52,34 +86,24 @@
     S.ui.onReady(async function() {
       // Phase 1: Core System Initialization
       S.toast.init();
-      S.ui.init();
+      S.ui.init(); // This now just caches existing DOM elements
       
-      S.ui.showLoadingScreen();
+      // The loading screen is already visible from the HTML.
 
       try {
         // Phase 2: Session & Connection
         const sessionInitialized = await S.auth.initSession();
         
         if (sessionInitialized) {
-          S.connection.init(); 
-
-          // Phase 3: Full App Load
-          S.appLoaded = true;
-          await S.auth.setOnlineStatus("online");
-          S.ui.showApp();
-          
-          // Initialize feature modules that need to run after login
-          S.servers.init();
-          S.friends.init();
-
+          // onAuthStateChange in auth.js will handle the transition to S.ui.showApp()
         } else {
           console.log("No active session. Displaying Auth UI.");
-          S.ui.showAuth();
+          S.ui.showAuth(); // This will hide loading and show the auth form
         }
       } catch (error) {
         // Phase 4: Critical Failure Handling
         console.error("CRITICAL INITIALIZATION FAILURE: ", error);
-        S.ui.showErrorState("Критическая ошибка. Не удалось запустить приложение. Попробуйте обновить страницу.", error);
+        S.ui.showErrorState("Критическая ошибка. Не удалось запустить приложение.", error);
       }
 
       // Unload handler
