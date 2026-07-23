@@ -16,63 +16,76 @@
   <!-- SDKs -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="https://cdn.jsdelivr.net/npm/livekit-client@2/dist/livekit-client.umd.min.js"></script>
+
+  <!-- Core SENTCOR Initializer -->
+  <script>
+    window.S = window.SENTCOR = window.S || {};
+  </script>
 </head>
 <body>
   <div id="app"></div>
+  <div id="toast-container"></div>
 
-  <!-- Core Modules -->
+  <!-- 
+    Core Module Loading Order:
+    1. config.js & supabase.js: Base configuration.
+    2. ui.js: Manages all DOM interactions and must define S.ui and S.ui.onReady.
+    3. toast.js, auth.js, connection.js: Core services that depend on the base S object.
+    4. Feature modules: Depend on core services.
+  -->
   <script src="js/config.js"></script>
   <script src="js/supabase.js"></script>
+  <script src="js/ui.js"></script>
   <script src="js/toast.js"></script>
   <script src="js/auth.js"></script>
-  <script src="js/ui.js"></script>
   <script src="js/connection.js"></script>
   
   <!-- Feature Modules -->
-  <script src="js/chat.js"></script>
+  <script src="js/servers.js"></script>
   <script src="js/friends.js"></script>
   <script src="js/profile.js"></script>
-  <script src="js/servers.js"></script>
+  <script src="js/chat.js"></script>
   <script src="js/voice.js"></script>
 
+  <!-- Main Application Entry Point -->
   <script>
-    document.addEventListener('DOMContentLoaded', async function() {
-      // Phase 1: Core System Initialization (must not fail)
-      window.SENTCOR.toast.init();
-      window.SENTCOR.ui.init();
+    S.ui.onReady(async function() {
+      // Phase 1: Core System Initialization
+      S.toast.init();
+      S.ui.init();
       
-      // Show a neutral state, not the full auth screen yet
-      window.SENTCOR.ui.showLoadingScreen();
+      S.ui.showLoadingScreen();
 
       try {
         // Phase 2: Session & Connection
-        const sessionInitialized = await window.SENTCOR.auth.initSession();
+        const sessionInitialized = await S.auth.initSession();
         
         if (sessionInitialized) {
-          // Start connection manager ONLY if a session exists
-          window.SENTCOR.connection.init(); 
+          S.connection.init(); 
 
           // Phase 3: Full App Load
-          window.SENTCOR.appLoaded = true;
-          await window.SENTCOR.auth.setOnlineStatus("online");
-          window.SENTCOR.ui.showApp();
+          S.appLoaded = true;
+          await S.auth.setOnlineStatus("online");
+          S.ui.showApp();
+          
+          // Initialize feature modules that need to run after login
+          S.servers.init();
+          S.friends.init();
+
         } else {
-          // If no session, show the auth screen
           console.log("No active session. Displaying Auth UI.");
-          window.SENTCOR.ui.showAuth();
+          S.ui.showAuth();
         }
       } catch (error) {
         // Phase 4: Critical Failure Handling
         console.error("CRITICAL INITIALIZATION FAILURE:", error);
-        // Use a method that doesn't rely on the main app structure
-        window.SENTCOR.ui.showErrorState("Критическая ошибка. Не удалось запустить приложение. Попробуйте обновить страницу.");
+        S.ui.showErrorState("Критическая ошибка. Не удалось запустить приложение. Попробуйте обновить страницу.");
       }
 
       // Unload handler
       window.addEventListener("beforeunload", () => {
-        if (!window.SENTCOR.appLoaded || !window.SENTCOR.user) return;
-        // This is a synchronous call, but it's the most reliable way on unload
-        window.SENTCOR.auth.setOnlineStatus("offline");
+        if (!S.appLoaded || !S.user) return;
+        S.auth.setOnlineStatus("offline");
       });
     });
   </script>

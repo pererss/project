@@ -1,69 +1,111 @@
-// SENTCOR v2.0 — Themed Toast Module
+// SENTCOR v3.0 — Advanced & Customizable Toast Module
 (function() {
     "use strict";
 
-    window.SENTCOR = window.SENTCOR || {};
+    window.S = window.SENTCOR = window.S || {};
 
     const toast = {
-        /**
-         * Initializes the toast module.
-         * Ensures the toast container exists in the DOM.
-         */
         init: function() {
-            // Check if container already exists
-            if (document.getElementById("toast-container")) {
-                return;
+            if (!document.getElementById("toast-container")) {
+                const container = document.createElement("div");
+                container.id = "toast-container";
+                document.body.appendChild(container);
             }
-            // Create and append the container to the body
-            const toastContainer = document.createElement("div");
-            toastContainer.id = "toast-container";
-            document.body.appendChild(toastContainer);
             console.log("[Toast] Module Initialized.");
         },
 
         /**
-         * Shows a toast notification.
+         * Shows a standard text-based toast notification.
          * @param {string} message - The message to display.
-         * @param {('info'|'success'|'error'|'warning')} [type='info'] - The type of toast.
+         * @param {'info'|'success'|'error'|'warning'} [type='info'] - The type of toast.
          * @param {number} [duration=5000] - The duration in milliseconds.
          */
         show: function(message, type = "info", duration = 5000) {
-            const toastContainer = document.getElementById("toast-container");
-            if (!toastContainer) {
+            this.showCustom({
+                content: S.ui.escapeHtml(message),
+                type: type,
+                duration: duration,
+                position: 'top-center'
+            });
+        },
+
+        /**
+         * Shows a fully customizable toast notification.
+         * @param {object} options - The options for the toast.
+         * @param {string} options.content - HTML content for the toast.
+         * @param {string} [options.type='info'] - A class to apply for styling.
+         * @param {number} [options.duration=5000] - Duration in ms. 0 for permanent.
+         * @param {string} [options.position='top-center'] - e.g., 'bottom-right', 'top-left'.
+         * @param {function} [options.onClick=null] - Callback function for click events.
+         */
+        showCustom: function(options) {
+            const {
+                content,
+                type = 'info',
+                duration = 5000,
+                position = 'top-center',
+                onClick = null
+            } = options;
+
+            const container = document.getElementById("toast-container");
+            if (!container) {
                 console.error("[Toast] Container not found. Was init() called?");
-                // As a fallback, try to initialize now.
-                this.init();
-                // Re-run the show function after a short delay to allow DOM update.
-                setTimeout(() => this.show(message, type, duration), 50);
+                setTimeout(() => this.showCustom(options), 50);
                 return;
             }
-
-            // Sanitize input to prevent potential XSS if message is ever used in innerHTML
-            const safeMessage = document.createTextNode(message);
+            
+            // Ensure position-specific container exists
+            let positionContainer = document.getElementById(`toast-container-${position}`);
+            if (!positionContainer) {
+                positionContainer = document.createElement("div");
+                positionContainer.id = `toast-container-${position}`;
+                positionContainer.className = `toast-position-container ${position}`;
+                container.appendChild(positionContainer);
+            }
 
             const toastElement = document.createElement("div");
-            // The classes 'toast' and the type are defined in the main CSS file
             toastElement.className = `toast ${type}`;
-            
-            toastElement.appendChild(safeMessage);
-            
-            // Add to the top of the container
-            toastContainer.prepend(toastElement);
+            toastElement.innerHTML = content; // Content is expected to be safe HTML
 
-            // Set a timer to remove the toast
-            setTimeout(() => {
-                // Add a class to trigger the fade-out animation
-                toastElement.classList.add("removing");
-
-                // Remove the element from the DOM after the animation completes
-                toastElement.addEventListener('animationend', () => {
-                    toastElement.remove();
+            if (onClick && typeof onClick === 'function') {
+                toastElement.classList.add('clickable');
+                toastElement.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    onClick();
+                    this.remove(toastElement);
                 });
-            }, duration);
+            }
+            
+            positionContainer.prepend(toastElement);
+
+            if (duration > 0) {
+                setTimeout(() => {
+                    this.remove(toastElement);
+                }, duration);
+            }
+            
+            return toastElement;
+        },
+
+        /**
+         * Removes a toast element with a fade-out animation.
+         * @param {HTMLElement} toastElement - The toast element to remove.
+         */
+        remove: function(toastElement) {
+            if (!toastElement || !toastElement.parentNode) return;
+            
+            toastElement.classList.add("removing");
+            toastElement.addEventListener('animationend', () => {
+                toastElement.remove();
+                // Optional: clean up empty position containers
+                const parent = toastElement.parentNode;
+                if (parent && parent.classList.contains('toast-position-container') && parent.children.length === 0) {
+                    parent.remove();
+                }
+            });
         }
     };
 
-    // Attach to the global SENTCOR object
     S.toast = toast;
 
 })();
