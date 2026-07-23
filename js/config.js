@@ -7,7 +7,6 @@ window.S.config = {
   SUPABASE_KEY: "sb_publishable_V-tjO1rW-6ltXevYbMte4Q_SXD9-QCB"
 };
 
-// Supabase CDN initialization
 if (window.supabase) {
   window.S.supabase = window.supabase.createClient(
     window.S.config.SUPABASE_URL,

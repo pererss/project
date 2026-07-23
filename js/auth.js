@@ -7,6 +7,7 @@ window.S.auth = window.S.auth || {};
 (function () {
   var supabase = null;
   var currentUser = null;
+  var currentProfile = null;
   var isLoginMode = true;
 
   function getSupabase() {
@@ -14,17 +15,11 @@ window.S.auth = window.S.auth || {};
     return supabase;
   }
 
-  /* -----------------------------------------------------
-     DOM references (populated after DOMContentLoaded)
-     ----------------------------------------------------- */
   var $authScreen, $mainScreen;
   var $email, $password, $username;
   var $authBtn, $authToggleBtn;
   var $authError;
 
-  /* -----------------------------------------------------
-     Initialise DOM handles
-     ----------------------------------------------------- */
   function cacheDom() {
     $authScreen = document.getElementById('auth-screen');
     $mainScreen = document.getElementById('main-app-screen');
@@ -42,9 +37,6 @@ window.S.auth = window.S.auth || {};
   }
   function hideAuthError() { if ($authError) { $authError.textContent = ''; $authError.style.display = 'none'; } }
 
-  /* -----------------------------------------------------
-     Toggle login / register mode
-     ----------------------------------------------------- */
   function toggleMode() {
     isLoginMode = !isLoginMode;
     hideAuthError();
@@ -52,14 +44,11 @@ window.S.auth = window.S.auth || {};
     if ($authBtn) $authBtn.textContent = isLoginMode ? 'Войти' : 'Зарегистрироваться';
     if ($authToggleBtn) {
       $authToggleBtn.innerHTML = isLoginMode
-        ? 'Нет аккаунта? <span>Зарегистрироваться</span>'
-        : 'Уже есть аккаунт? <span>Войти</span>';
+        ? 'Нет аккаунта? <span class="auth-link">Зарегистрироваться</span>'
+        : 'Уже есть аккаунт? <span class="auth-link">Войти</span>';
     }
   }
 
-  /* -----------------------------------------------------
-     Submit handler
-     ----------------------------------------------------- */
   async function handleSubmit() {
     hideAuthError();
     var email = ($email ? $email.value : '').trim();
@@ -69,6 +58,7 @@ window.S.auth = window.S.auth || {};
     if (!email || !password) { showAuthError('Заполните email и пароль'); return; }
     if (!isLoginMode && !uname) { showAuthError('Введите логин'); return; }
     if (password.length < 6) { showAuthError('Пароль должен быть не менее 6 символов'); return; }
+    if (!isLoginMode && uname.length < 3) { showAuthError('Логин должен быть не менее 3 символов'); return; }
 
     window.S.ui.showLoading(isLoginMode ? 'Вход...' : 'Регистрация...');
     try {
@@ -80,20 +70,22 @@ window.S.auth = window.S.auth || {};
       } else {
         result = await client.auth.signUp({ email: email, password: password });
         if (result.data && result.data.user && !result.error) {
-          // Create profile row
           var profileRes = await client.from('profiles').upsert({
             id: result.data.user.id,
             username: uname,
             email: email,
             avatar_url: '',
             status: 'online',
+            bio: '',
             created_at: new Date().toISOString()
           }, { onConflict: 'id' });
-          if (profileRes.error) console.warn('[SentCor] Profile upsert warning:', profileRes.error.message);
+          if (profileRes.error) console.warn('[SentCor] Profile upsert:', profileRes.error.message);
         }
       }
       if (result.error) throw result.error;
       currentUser = result.data.user;
+      // Fetch profile
+      await fetchProfile();
       window.S.ui.showToast(isLoginMode ? 'Добро пожаловать!' : 'Аккаунт создан!', 'success');
       window.S.auth.onAuthSuccess(currentUser);
     } catch (err) {
@@ -107,9 +99,17 @@ window.S.auth = window.S.auth || {};
     }
   }
 
-  /* -----------------------------------------------------
-     Check existing session
-     ----------------------------------------------------- */
+  async function fetchProfile() {
+    if (!currentUser) return null;
+    try {
+      var client = getSupabase();
+      if (!client) return null;
+      var res = await client.from('profiles').select('*').eq('id', currentUser.id).single();
+      if (res.data) currentProfile = res.data;
+    } catch (e) { console.warn('[SentCor] fetchProfile:', e.message); }
+    return currentProfile;
+  }
+
   async function checkSession() {
     try {
       var client = getSupabase();
@@ -117,6 +117,7 @@ window.S.auth = window.S.auth || {};
       var res = await client.auth.getSession();
       if (res.data && res.data.session && res.data.session.user) {
         currentUser = res.data.session.user;
+        await fetchProfile();
         window.S.auth.onAuthSuccess(currentUser);
         return currentUser;
       }
@@ -124,29 +125,21 @@ window.S.auth = window.S.auth || {};
     return null;
   }
 
-  /* -----------------------------------------------------
-     Logout
-     ----------------------------------------------------- */
   async function logout() {
     try {
       var client = getSupabase();
-      if (client) {
-        // Set status to offline before signing out
-        if (currentUser) {
-          await client.from('profiles').upsert({ id: currentUser.id, status: 'offline' }, { onConflict: 'id' });
-        }
+      if (client && currentUser) {
+        await client.from('profiles').upsert({ id: currentUser.id, status: 'offline' }, { onConflict: 'id' });
         await client.auth.signOut();
       }
     } catch (e) { console.warn('[SentCor] Logout:', e.message); }
     currentUser = null;
+    currentProfile = null;
     if ($authScreen) $authScreen.classList.add('active');
     if ($mainScreen) $mainScreen.classList.remove('active');
     window.S.ui.showToast('Вы вышли из аккаунта', 'info');
   }
 
-  /* -----------------------------------------------------
-     Public API
-     ----------------------------------------------------- */
   window.S.auth.init = function () {
     cacheDom();
     if ($authToggleBtn) $authToggleBtn.addEventListener('click', toggleMode);
@@ -157,27 +150,30 @@ window.S.auth = window.S.auth || {};
       $username.style.display = 'none';
       $username.addEventListener('keydown', function (e) { if (e.key === 'Enter') handleSubmit(); });
     }
-    toggleMode(); // set initial state
+    toggleMode();
     checkSession();
   };
 
-  window.S.auth.onAuthSuccess = function onAuthSuccess(user) {
+  window.S.auth.onAuthSuccess = function (user) {
     currentUser = user;
     if ($authScreen) $authScreen.classList.remove('active');
     if ($mainScreen) $mainScreen.classList.add('active');
-    // Trigger app initialization after auth
     if (window.S.app && window.S.app.onLogin) window.S.app.onLogin(user);
   };
 
   window.S.auth.logout = logout;
   window.S.auth.getUser = function () { return currentUser; };
-  window.S.auth.refreshUser = async function () {
+  window.S.auth.getProfile = function () { return currentProfile; };
+  window.S.auth.fetchProfile = fetchProfile;
+  window.S.auth.updateProfile = async function (data) {
+    if (!currentUser) return { error: 'Не авторизован' };
     try {
       var client = getSupabase();
-      if (!client) return currentUser;
-      var res = await client.auth.getUser();
-      if (res.data && res.data.user) currentUser = res.data.user;
-    } catch (e) { /* noop */ }
-    return currentUser;
+      if (!client) return { error: 'Supabase не инициализирован' };
+      var res = await client.from('profiles').upsert(Object.assign({ id: currentUser.id }, data), { onConflict: 'id' });
+      if (res.error) throw res.error;
+      await fetchProfile();
+      return { success: true };
+    } catch (e) { return { error: e.message }; }
   };
 })();

@@ -6,8 +6,8 @@ window.S.friends = window.S.friends || {};
 
 (function () {
   var supabase = null;
-  var friends = [];           // { id, username, avatar_url, status, email }
-  var pendingRequests = [];   // { id, from_user, to_user, status, created_at, profile }
+  var friends = [];
+  var pendingRequests = [];
   var _subscribed = false;
 
   function getSupabase() {
@@ -15,16 +15,12 @@ window.S.friends = window.S.friends || {};
     return supabase;
   }
 
-  /* -----------------------------------------------------
-     Fetch friends list (accepted requests)
-     ----------------------------------------------------- */
   async function fetchFriends() {
     var user = window.S.auth.getUser();
     if (!user) return [];
     try {
       var client = getSupabase();
       if (!client) return [];
-      // Get accepted friend requests where current user is either sender or receiver
       var res = await client
         .from('friend_requests')
         .select('id, from_user, to_user, status, created_at')
@@ -32,17 +28,15 @@ window.S.friends = window.S.friends || {};
         .eq('status', 'accepted');
       if (res.error) throw res.error;
       var requestList = res.data || [];
-      // Get unique friend IDs
       var friendIds = [];
       requestList.forEach(function (r) {
         var fid = r.from_user === user.id ? r.to_user : r.from_user;
         if (friendIds.indexOf(fid) === -1) friendIds.push(fid);
       });
       if (friendIds.length === 0) { friends = []; return friends; }
-      // Fetch profiles
       var profilesRes = await client
         .from('profiles')
-        .select('id, username, avatar_url, status, email')
+        .select('id, username, avatar_url, status, email, bio')
         .in('id', friendIds);
       if (profilesRes.error) throw profilesRes.error;
       friends = profilesRes.data || [];
@@ -54,9 +48,6 @@ window.S.friends = window.S.friends || {};
     }
   }
 
-  /* -----------------------------------------------------
-     Fetch pending friend requests (incoming)
-     ----------------------------------------------------- */
   async function fetchPending() {
     var user = window.S.auth.getUser();
     if (!user) return [];
@@ -70,12 +61,11 @@ window.S.friends = window.S.friends || {};
         .eq('status', 'pending');
       if (res.error) throw res.error;
       var requestList = res.data || [];
-      // Fetch sender profiles
       var senderIds = requestList.map(function (r) { return r.from_user; });
       if (senderIds.length === 0) { pendingRequests = []; return pendingRequests; }
       var profilesRes = await client
         .from('profiles')
-        .select('id, username, avatar_url, status, email')
+        .select('id, username, avatar_url, status, email, bio')
         .in('id', senderIds);
       if (profilesRes.error) throw profilesRes.error;
       var profilesMap = {};
@@ -91,9 +81,6 @@ window.S.friends = window.S.friends || {};
     }
   }
 
-  /* -----------------------------------------------------
-     Search users by username (for add-friend tab)
-     ----------------------------------------------------- */
   async function searchUsers(query) {
     var user = window.S.auth.getUser();
     if (!user || !query || query.trim() === '') return [];
@@ -102,7 +89,7 @@ window.S.friends = window.S.friends || {};
       if (!client) return [];
       var res = await client
         .from('profiles')
-        .select('id, username, avatar_url, status, email')
+        .select('id, username, avatar_url, status, email, bio')
         .eq('username', query.trim())
         .neq('id', user.id);
       if (res.error) throw res.error;
@@ -113,16 +100,12 @@ window.S.friends = window.S.friends || {};
     }
   }
 
-  /* -----------------------------------------------------
-     Send friend request
-     ----------------------------------------------------- */
   async function sendRequest(toUserId) {
     var user = window.S.auth.getUser();
     if (!user) return { error: 'Не авторизован' };
     try {
       var client = getSupabase();
       if (!client) return { error: 'Supabase не инициализирован' };
-      // Check if already friends or request exists
       var existing = await client
         .from('friend_requests')
         .select('id, status')
@@ -146,9 +129,6 @@ window.S.friends = window.S.friends || {};
     }
   }
 
-  /* -----------------------------------------------------
-     Accept / decline friend request
-     ----------------------------------------------------- */
   async function respondRequest(requestId, accept) {
     var user = window.S.auth.getUser();
     if (!user) return { error: 'Не авторизован' };
@@ -156,16 +136,10 @@ window.S.friends = window.S.friends || {};
       var client = getSupabase();
       if (!client) return { error: 'Supabase не инициализирован' };
       if (accept) {
-        var res = await client
-          .from('friend_requests')
-          .update({ status: 'accepted' })
-          .eq('id', requestId);
+        var res = await client.from('friend_requests').update({ status: 'accepted' }).eq('id', requestId);
         if (res.error) throw res.error;
       } else {
-        var res2 = await client
-          .from('friend_requests')
-          .delete()
-          .eq('id', requestId);
+        var res2 = await client.from('friend_requests').delete().eq('id', requestId);
         if (res2.error) throw res2.error;
       }
       return { success: true };
@@ -174,9 +148,23 @@ window.S.friends = window.S.friends || {};
     }
   }
 
-  /* -----------------------------------------------------
-     Realtime subscription for friend_requests
-     ----------------------------------------------------- */
+  async function removeFriend(friendId) {
+    var user = window.S.auth.getUser();
+    if (!user) return { error: 'Не авторизован' };
+    try {
+      var client = getSupabase();
+      if (!client) return { error: 'Supabase не инициализирован' };
+      var res = await client
+        .from('friend_requests')
+        .delete()
+        .or('and(from_user.eq.' + user.id + ',to_user.eq.' + friendId + '),and(from_user.eq.' + friendId + ',to_user.eq.' + user.id + ')');
+      if (res.error) throw res.error;
+      return { success: true };
+    } catch (e) {
+      return { error: e.message };
+    }
+  }
+
   function subscribeRealtime() {
     if (_subscribed) return;
     try {
@@ -184,27 +172,24 @@ window.S.friends = window.S.friends || {};
       if (!client) return;
       client
         .channel('public:friend_requests')
-        .on('postgres_changes', { event: '*', schema: 'public', table: 'friend_requests' }, function (payload) {
-          // Refresh friends & pending on any change
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'friend_requests' }, function () {
           if (window.S.friends.onUpdate) window.S.friends.onUpdate();
         })
         .subscribe();
       _subscribed = true;
     } catch (e) {
-      console.warn('[SentCor] friends realtime subscribe:', e.message);
+      console.warn('[SentCor] friends realtime:', e.message);
     }
   }
 
-  /* -----------------------------------------------------
-     Public API
-     ----------------------------------------------------- */
   window.S.friends.fetchFriends = fetchFriends;
   window.S.friends.fetchPending = fetchPending;
   window.S.friends.searchUsers = searchUsers;
   window.S.friends.sendRequest = sendRequest;
   window.S.friends.respondRequest = respondRequest;
+  window.S.friends.removeFriend = removeFriend;
   window.S.friends.getFriends = function () { return friends; };
   window.S.friends.getPending = function () { return pendingRequests; };
   window.S.friends.subscribeRealtime = subscribeRealtime;
-  window.S.friends.onUpdate = null; // set by app.js
+  window.S.friends.onUpdate = null;
 })();
