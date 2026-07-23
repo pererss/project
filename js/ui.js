@@ -1,10 +1,29 @@
-// SENTCOR v4.2 — отказоустойчивый UI с таймаутом загрузки
-window.S = window.S || {};
-window.S.ui = window.S.ui || {};
-
-(function(S) {
+// SENTCOR v4.3 — Гарантия escapeHtml и отказоустойчивость
+(function(window) {
     "use strict";
 
+    // 1. Гарантируем существование глобальных пространств имен
+    window.S = window.S || {};
+    window.S.ui = window.S.ui || {};
+    window.S.utils = window.S.utils || {};
+
+    // 2. Определяем escapeHtml один раз и в одном месте
+    const escapeHtml = function(str) {
+        if (str === null || typeof str === 'undefined') return '';
+        return String(str).replace(/[&<>"']/g, (m) => ({
+            '&': '&amp;',
+            '<': '&lt;',
+            '>': '&gt;',
+            '"': '&quot;',
+            "'": '&#039;'
+        }[m]));
+    };
+
+    // 3. Присваиваем функцию в оба пространства имен для универсального доступа
+    window.S.ui.escapeHtml = escapeHtml;
+    window.S.utils.escapeHtml = escapeHtml;
+
+    // 4. Остальной UI-код
     const ui = {
         loadingTimeout: null,
         loadingScreen: null,
@@ -24,10 +43,9 @@ window.S.ui = window.S.ui || {};
             if (statusText) statusText.textContent = message;
 
             this.loadingScreen.style.display = 'flex';
-            this.loadingScreen.offsetHeight; // Trigger reflow
+            this.loadingScreen.offsetHeight;
             this.loadingScreen.classList.add('visible');
 
-            // Аварийный таймаут для предотвращения бесконечной загрузки
             if (this.loadingTimeout) clearTimeout(this.loadingTimeout);
             this.loadingTimeout = setTimeout(() => {
                 console.warn('[UI] Сработал таймаут загрузки. Принудительно скрываем лоадер.');
@@ -43,10 +61,9 @@ window.S.ui = window.S.ui || {};
             if (!this.loadingScreen) return;
 
             this.loadingScreen.classList.remove('visible');
-            // Ждем завершения анимации, чтобы скрыть элемент
             setTimeout(() => {
                 this.loadingScreen.style.display = 'none';
-            }, 300); // Должно совпадать с transition-duration в CSS
+            }, 300);
         },
 
         showMainApp() {
@@ -68,14 +85,14 @@ window.S.ui = window.S.ui || {};
             const sanitizedName = name.replace(/'/g, "\\'");
 
             if (avatarUrl) {
-                return `<img src="${avatarUrl}" 
-                             alt="${sanitizedName}'s Avatar" 
+                return `<img src="${S.ui.escapeHtml(avatarUrl)}" 
+                             alt="${S.ui.escapeHtml(sanitizedName)}'s Avatar" 
                              style="width:${size}; height:${size};" 
                              class="user-avatar-image"
                              onerror="this.outerHTML = S.ui.createAvatarHTML('${sanitizedName}', null, '${size}');">`;
             }
             
-            const initial = name ? name[0].toUpperCase() : 'U';
+            const initial = name ? S.ui.escapeHtml(name[0].toUpperCase()) : 'U';
             const fontSize = `calc(${size} / 2.2)`;
             return `<div class="user-avatar-initials" 
                          style="width:${size}; height:${size}; font-size:${fontSize};">
@@ -94,7 +111,8 @@ window.S.ui = window.S.ui || {};
         }
     };
 
-    S.ui = { ...S.ui, ...ui };
+    // Сливаем новый функционал с уже существующим в S.ui
+    Object.assign(S.ui, ui);
     document.addEventListener('DOMContentLoaded', () => S.ui.init());
 
-})(window.S);
+})(window);

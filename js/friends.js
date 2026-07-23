@@ -106,6 +106,12 @@
         if (searchInput) {
             searchInput.onkeyup = (e) => {
                 const searchTerm = e.target.value.toLowerCase();
+                if (searchTerm === '') {
+                    document.querySelectorAll(".chat-row").forEach(row => {
+                        row.style.display = '';
+                    });
+                    return;
+                }
                 document.querySelectorAll(".chat-row").forEach(row => {
                     const name = row.querySelector('.sp-friend-name').textContent.toLowerCase();
                     row.style.display = name.includes(searchTerm) ? '' : 'none';
