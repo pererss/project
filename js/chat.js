@@ -1,5 +1,5 @@
 /* =====================================================
-   SentCor — Chat Module (Discord-style)
+   SentCor — Chat Module (Discord-style messages)
    ===================================================== */
 window.S = window.S || {};
 window.S.chat = window.S.chat || {};
@@ -19,9 +19,6 @@ window.S.chat = window.S.chat || {};
     return supabase;
   }
 
-  /* -----------------------------------------------------
-     Fetch messages
-     ----------------------------------------------------- */
   async function fetchMessages(friendId) {
     var user = window.S.auth.getUser();
     if (!user || !friendId) { messages = []; renderMessages(); return []; }
@@ -36,11 +33,9 @@ window.S.chat = window.S.chat || {};
         .order('created_at', { ascending: true });
       if (res.error) throw res.error;
       messages = res.data || [];
-      // Parse reactions JSON
       messages.forEach(function (m) {
-        if (m.reactions && typeof m.reactions === 'string') {
-          try { m.reactions = JSON.parse(m.reactions); } catch (e) { m.reactions = {}; }
-        }
+        if (m.reactions && typeof m.reactions === 'string') { try { m.reactions = JSON.parse(m.reactions); } catch (e) { m.reactions = {}; } }
+        if (!m.reactions) m.reactions = {};
       });
       renderMessages();
       return messages;
@@ -49,14 +44,9 @@ window.S.chat = window.S.chat || {};
       messages = [];
       renderMessages();
       return [];
-    } finally {
-      window.S.ui.hideLoading();
-    }
+    } finally { window.S.ui.hideLoading(); }
   }
 
-  /* -----------------------------------------------------
-     Send message
-     ----------------------------------------------------- */
   async function sendMessage(content) {
     var user = window.S.auth.getUser();
     if (!user || !activeFriendId) return;
@@ -65,207 +55,147 @@ window.S.chat = window.S.chat || {};
       var client = getSupabase();
       if (!client) return;
       var res = await client.from('messages').insert({
-        sender_id: user.id,
-        receiver_id: activeFriendId,
-        content: content.trim(),
-        created_at: new Date().toISOString(),
-        read: false,
-        reactions: '{}'
+        sender_id: user.id, receiver_id: activeFriendId,
+        content: content.trim(), created_at: new Date().toISOString(),
+        read: false, reactions: '{}'
       });
       if (res.error) throw res.error;
     } catch (e) {
       console.error('[SentCor] sendMessage:', e.message);
-      window.S.ui.showToast('Не удалось отправить сообщение', 'error');
+      window.S.ui.showToast('Не удалось отправить', 'error');
     }
   }
 
-  /* -----------------------------------------------------
-     Add reaction to message
-     ----------------------------------------------------- */
   async function addReaction(messageId, emoji) {
     var user = window.S.auth.getUser();
-    if (!user || !messageId) return;
+    if (!user) return;
     try {
       var client = getSupabase();
       if (!client) return;
       var msg = messages.find(function (m) { return m.id === messageId; });
       if (!msg) return;
-      var reactions = msg.reactions || {};
-      if (!reactions[emoji]) reactions[emoji] = [];
-      var userIdx = reactions[emoji].indexOf(user.id);
-      if (userIdx > -1) {
-        reactions[emoji].splice(userIdx, 1);
-        if (reactions[emoji].length === 0) delete reactions[emoji];
-      } else {
-        reactions[emoji].push(user.id);
-      }
-      // Update locally
-      msg.reactions = reactions;
+      var r = msg.reactions || {};
+      if (!r[emoji]) r[emoji] = [];
+      var idx = r[emoji].indexOf(user.id);
+      if (idx > -1) { r[emoji].splice(idx, 1); if (r[emoji].length === 0) delete r[emoji]; }
+      else { r[emoji].push(user.id); }
+      msg.reactions = r;
       renderMessages();
-      // Update in DB
-      await client.from('messages').update({ reactions: JSON.stringify(reactions) }).eq('id', messageId);
-    } catch (e) {
-      console.error('[SentCor] addReaction:', e.message);
-    }
+      await client.from('messages').update({ reactions: JSON.stringify(r) }).eq('id', messageId);
+    } catch (e) { console.error('[SentCor] addReaction:', e.message); }
   }
 
-  /* -----------------------------------------------------
-     Delete message
-     ----------------------------------------------------- */
   async function deleteMessage(messageId) {
     var user = window.S.auth.getUser();
-    if (!user || !messageId) return;
+    if (!user) return;
     try {
       var client = getSupabase();
       if (!client) return;
       var msg = messages.find(function (m) { return m.id === messageId; });
-      if (!msg || msg.sender_id !== user.id) { window.S.ui.showToast('Можно удалять только свои сообщения', 'error'); return; }
-      var res = await client.from('messages').delete().eq('id', messageId);
-      if (res.error) throw res.error;
+      if (!msg || msg.sender_id !== user.id) { window.S.ui.showToast('Только свои сообщения', 'error'); return; }
+      await client.from('messages').delete().eq('id', messageId);
       messages = messages.filter(function (m) { return m.id !== messageId; });
       renderMessages();
-    } catch (e) {
-      console.error('[SentCor] deleteMessage:', e.message);
-    }
+    } catch (e) { console.error('[SentCor] deleteMessage:', e.message); }
   }
 
-  /* -----------------------------------------------------
-     Append message (realtime)
-     ----------------------------------------------------- */
   function appendMessage(msg) {
     if (!msg) return;
-    var exists = messages.some(function (m) { return m.id === msg.id; });
-    if (!exists) {
-      if (msg.reactions && typeof msg.reactions === 'string') {
-        try { msg.reactions = JSON.parse(msg.reactions); } catch (e) { msg.reactions = {}; }
-      }
-      messages.push(msg);
-      renderMessages();
-      scrollToBottom();
-    }
+    if (messages.some(function (m) { return m.id === msg.id; })) return;
+    if (msg.reactions && typeof msg.reactions === 'string') { try { msg.reactions = JSON.parse(msg.reactions); } catch (e) { msg.reactions = {}; } }
+    if (!msg.reactions) msg.reactions = {};
+    messages.push(msg);
+    renderMessages();
+    scrollToBottom();
   }
 
-  /* -----------------------------------------------------
-     Typing indicator
-     ----------------------------------------------------- */
   function broadcastTyping() {
     var user = window.S.auth.getUser();
     if (!user || !activeFriendId) return;
     try {
       var client = getSupabase();
       if (!client) return;
-      // We use a simple presence channel for typing
       client.channel('typing:' + activeFriendId + ':' + user.id)
-        .track({ user_id: user.id, username: (window.S.auth.getProfile() || {}).username || 'User' });
-    } catch (e) { /* noop */ }
-  }
-
-  function subscribeTyping() {
-    var user = window.S.auth.getUser();
-    if (!user || !activeFriendId) return;
-    try {
-      var client = getSupabase();
-      if (!client) return;
-      client.channel('typing:' + user.id + ':' + activeFriendId)
-        .on('presence', { event: 'sync' }, function () {
-          var state = client.channel('typing:' + user.id + ':' + activeFriendId).presenceState();
-          var typingUsers = Object.keys(state);
-          var statusEl = document.getElementById('chat-header-status');
-          if (statusEl && typingUsers.length > 0 && activeFriendProfile) {
-            statusEl.textContent = 'печатает...';
-            statusEl.className = 'header-status typing';
-          } else if (statusEl && activeFriendProfile) {
-            statusEl.textContent = window.S.utils.getStatusLabel(activeFriendProfile.status);
-            statusEl.className = 'header-status';
-          }
-        })
-        .subscribe();
+        .track({ user_id: user.id });
     } catch (e) { /* noop */ }
   }
 
   function handleTypingInput() {
-    if (!_isTyping) {
-      _isTyping = true;
-      broadcastTyping();
-    }
+    if (!_isTyping) { _isTyping = true; broadcastTyping(); }
     if (_typingTimeout) clearTimeout(_typingTimeout);
     _typingTimeout = setTimeout(function () { _isTyping = false; }, 2000);
   }
 
   /* -----------------------------------------------------
-     Render messages (Discord style)
+     Render messages (Discord-style: grouped, from both sides)
      ----------------------------------------------------- */
   function renderMessages() {
     var container = document.getElementById('chat-messages');
     if (!container) return;
     var user = window.S.auth.getUser();
     if (!user || !activeFriendId) {
-      container.innerHTML = '<div class="empty-state">' +
-        '<div class="empty-icon">&#128172;</div>' +
+      container.innerHTML = '<div class="messages-spacer"></div>' +
+        '<div class="empty-state"><div class="empty-icon">' + window.S.icons.message + '</div>' +
         '<div class="empty-title">Выберите диалог</div>' +
         '<div class="empty-text">Выберите чат слева, чтобы начать общение</div></div>';
       return;
     }
     if (messages.length === 0) {
-      container.innerHTML = '<div class="empty-state">' +
-        '<div class="empty-icon">&#128172;</div>' +
+      container.innerHTML = '<div class="messages-spacer"></div>' +
+        '<div class="empty-state"><div class="empty-icon">' + window.S.icons.message + '</div>' +
         '<div class="empty-title">Начните диалог</div>' +
-        '<div class="empty-text">Отправьте первое сообщение пользователю ' + window.S.utils.escapeHtml((activeFriendProfile || {}).username || '') + '!</div></div>';
+        '<div class="empty-text">Отправьте первое сообщение!</div></div>';
       return;
     }
 
-    // Group messages by sender + time proximity
     var grouped = [];
-    var lastGroup = null;
+    var last = null;
     messages.forEach(function (msg) {
-      var timeDiff = lastGroup && lastGroup.messages.length > 0
-        ? (new Date(msg.created_at) - new Date(lastGroup.messages[lastGroup.messages.length - 1].created_at))
+      var diff = last && last.msgs.length > 0
+        ? (new Date(msg.created_at) - new Date(last.msgs[last.msgs.length - 1].created_at))
         : Infinity;
-      if (!lastGroup || lastGroup.sender_id !== msg.sender_id || timeDiff > 300000) {
-        lastGroup = { sender_id: msg.sender_id, messages: [msg] };
-        grouped.push(lastGroup);
+      if (!last || last.sender_id !== msg.sender_id || diff > 300000) {
+        last = { sender_id: msg.sender_id, msgs: [msg] };
+        grouped.push(last);
       } else {
-        lastGroup.messages.push(msg);
+        last.msgs.push(msg);
       }
     });
 
-    var html = '';
-    var lastDateLabel = '';
-    grouped.forEach(function (group) {
-      var msg0 = group.messages[0];
-      var isOwn = msg0.sender_id === user.id;
+    var html = '<div class="messages-spacer"></div>';
+    var lastDate = '';
+    grouped.forEach(function (g) {
+      var m0 = g.msgs[0];
+      var isOwn = m0.sender_id === user.id;
       var profile = isOwn ? window.S.auth.getProfile() : activeFriendProfile;
-      var username = profile ? profile.username : (isOwn ? 'Вы' : 'Пользователь');
+      var uname = profile ? profile.username : (isOwn ? 'Вы' : 'Пользователь');
       var avatarUrl = profile ? profile.avatar_url : '';
-      var dateLabel = window.S.utils.getDateHeader(msg0.created_at);
+      var dateLabel = window.S.utils.getDateHeader(m0.created_at);
 
-      if (dateLabel !== lastDateLabel) {
+      if (dateLabel !== lastDate) {
         html += '<div class="date-divider"><span>' + window.S.utils.escapeHtml(dateLabel) + '</span></div>';
-        lastDateLabel = dateLabel;
+        lastDate = dateLabel;
       }
 
       html += '<div class="msg-group ' + (isOwn ? 'msg-group--own' : '') + '">' +
-        '<div class="msg-group-avatar">' + window.S.utils.createAvatarHTML(username, avatarUrl, 40) + '</div>' +
-        '<div class="msg-group-content">' +
-        '<div class="msg-group-header">' +
-        '<span class="msg-author">' + window.S.utils.escapeHtml(username) + '</span>' +
-        '<span class="msg-timestamp">' + window.S.utils.formatTime(msg0.created_at) + '</span>' +
+        '<div class="msg-avatar">' + window.S.utils.createAvatarHTML(uname, avatarUrl, 40) + '</div>' +
+        '<div class="msg-body">' +
+        '<div class="msg-header">' +
+        '<span class="msg-author">' + window.S.utils.escapeHtml(uname) + '</span>' +
+        '<span class="msg-time">' + window.S.utils.formatTime(m0.created_at) + '</span>' +
         '</div>';
 
-      group.messages.forEach(function (msg) {
+      g.msgs.forEach(function (msg) {
         var escaped = window.S.utils.escapeHtml(msg.content);
         var isOwnMsg = msg.sender_id === user.id;
-        var reactionsHTML = renderReactions(msg);
-
+        var rHTML = renderReactions(msg);
         html += '<div class="msg-line" data-msg-id="' + msg.id + '">' +
-          '<div class="msg-content">' + escaped + '</div>' +
-          '<div class="msg-actions">' +
-          (isOwnMsg ? '<button class="msg-action-btn msg-delete-btn" data-msg-id="' + msg.id + '" title="Удалить">🗑</button>' : '') +
-          '</div>' +
-          '</div>';
-        if (reactionsHTML) {
-          html += '<div class="msg-reactions">' + reactionsHTML + '</div>';
-        }
+          '<div class="msg-text">' + escaped + '</div>' +
+          '<div class="msg-hover-actions">' +
+          '<button class="msg-action" data-action="react" data-msg-id="' + msg.id + '" title="Реакция">' + window.S.icons.smile + '</button>' +
+          (isOwnMsg ? '<button class="msg-action msg-action--danger" data-action="delete" data-msg-id="' + msg.id + '" title="Удалить">' + window.S.icons.trash + '</button>' : '') +
+          '</div></div>';
+        if (rHTML) html += '<div class="msg-reactions">' + rHTML + '</div>';
       });
 
       html += '</div></div>';
@@ -277,15 +207,15 @@ window.S.chat = window.S.chat || {};
   }
 
   function renderReactions(msg) {
-    var reactions = msg.reactions || {};
+    var r = msg.reactions || {};
     var user = window.S.auth.getUser();
     var html = '';
-    Object.keys(reactions).forEach(function (emoji) {
-      var userIds = reactions[emoji];
-      if (userIds.length === 0) return;
-      var isActive = user && userIds.indexOf(user.id) > -1;
-      html += '<button class="reaction-chip ' + (isActive ? 'reaction-chip--active' : '') + '" data-msg-id="' + msg.id + '" data-emoji="' + emoji + '">' +
-        emoji + ' <span class="reaction-count">' + userIds.length + '</span></button>';
+    Object.keys(r).forEach(function (emoji) {
+      var ids = r[emoji];
+      if (!ids || ids.length === 0) return;
+      var active = user && ids.indexOf(user.id) > -1;
+      html += '<button class="reaction ' + (active ? 'reaction--active' : '') + '" data-msg-id="' + msg.id + '" data-emoji="' + emoji + '">' +
+        emoji + ' <span>' + ids.length + '</span></button>';
     });
     return html;
   }
@@ -293,83 +223,55 @@ window.S.chat = window.S.chat || {};
   function bindMessageActions() {
     var container = document.getElementById('chat-messages');
     if (!container) return;
-
-    // Hover actions
     container.querySelectorAll('.msg-line').forEach(function (el) {
       el.addEventListener('mouseenter', function () { el.classList.add('msg-line--hover'); });
       el.addEventListener('mouseleave', function () { el.classList.remove('msg-line--hover'); });
     });
-
-    // Delete buttons
-    container.querySelectorAll('.msg-delete-btn').forEach(function (btn) {
+    container.querySelectorAll('[data-action="delete"]').forEach(function (btn) {
+      btn.addEventListener('click', function (e) { e.stopPropagation(); deleteMessage(btn.getAttribute('data-msg-id')); });
+    });
+    container.querySelectorAll('[data-action="react"]').forEach(function (btn) {
       btn.addEventListener('click', function (e) {
         e.stopPropagation();
-        deleteMessage(btn.getAttribute('data-msg-id'));
+        var msgId = btn.getAttribute('data-msg-id');
+        window.S.ui.showEmojiPicker(btn, function (emoji) { addReaction(msgId, emoji); });
       });
     });
-
-    // Reaction chips (toggle)
-    container.querySelectorAll('.reaction-chip').forEach(function (chip) {
+    container.querySelectorAll('.reaction').forEach(function (chip) {
       chip.addEventListener('click', function () {
         addReaction(chip.getAttribute('data-msg-id'), chip.getAttribute('data-emoji'));
-      });
-    });
-
-    // Double-click to react with quick emojis
-    container.querySelectorAll('.msg-content').forEach(function (el) {
-      el.addEventListener('dblclick', function () {
-        var line = el.closest('.msg-line');
-        if (line) {
-          var msgId = line.getAttribute('data-msg-id');
-          addReaction(msgId, '👍');
-        }
       });
     });
   }
 
   function scrollToBottom() {
-    var container = document.getElementById('chat-messages');
-    if (container) {
-      requestAnimationFrame(function () { container.scrollTop = container.scrollHeight; });
-    }
+    var c = document.getElementById('chat-messages');
+    if (c) requestAnimationFrame(function () { c.scrollTop = c.scrollHeight; });
   }
 
-  /* -----------------------------------------------------
-     Mark as read
-     ----------------------------------------------------- */
   async function markRead(friendId) {
     var user = window.S.auth.getUser();
     if (!user || !friendId) return;
     try {
       var client = getSupabase();
       if (!client) return;
-      await client.from('messages')
-        .update({ read: true })
-        .eq('sender_id', friendId)
-        .eq('receiver_id', user.id)
-        .eq('read', false);
+      await client.from('messages').update({ read: true }).eq('sender_id', friendId).eq('receiver_id', user.id).eq('read', false);
     } catch (e) { /* noop */ }
   }
 
-  /* -----------------------------------------------------
-     Realtime subscription
-     ----------------------------------------------------- */
   function subscribeRealtime() {
     if (_subscribed) return;
     try {
       var client = getSupabase();
       if (!client) return;
-      _channel = client
-        .channel('public:messages')
+      _channel = client.channel('public:messages')
         .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages' }, function (payload) {
           var msg = payload.new;
           if (window.S.chat.activeFriendId &&
             (msg.sender_id === window.S.chat.activeFriendId || msg.receiver_id === window.S.chat.activeFriendId)) {
             window.S.chat.appendMessage(msg);
             var user = window.S.auth.getUser();
-            if (user && msg.sender_id === window.S.chat.activeFriendId && msg.receiver_id === user.id) {
-              window.S.chat.markRead(window.S.chat.activeFriendId);
-            }
+            if (user && msg.sender_id === window.S.chat.activeFriendId) markRead(window.S.chat.activeFriendId);
           }
           if (window.S.app && window.S.app.refreshConversations) window.S.app.refreshConversations();
         })
@@ -379,32 +281,21 @@ window.S.chat = window.S.chat || {};
             (msg.sender_id === window.S.chat.activeFriendId || msg.receiver_id === window.S.chat.activeFriendId)) {
             var idx = messages.findIndex(function (m) { return m.id === msg.id; });
             if (idx > -1) {
-              if (msg.reactions && typeof msg.reactions === 'string') {
-                try { msg.reactions = JSON.parse(msg.reactions); } catch (e) { msg.reactions = {}; }
-              }
+              if (msg.reactions && typeof msg.reactions === 'string') { try { msg.reactions = JSON.parse(msg.reactions); } catch (e) { msg.reactions = {}; } }
               messages[idx] = msg;
               renderMessages();
             }
           }
-        })
-        .subscribe();
+        }).subscribe();
       _subscribed = true;
-    } catch (e) {
-      console.warn('[SentCor] chat realtime:', e.message);
-    }
+    } catch (e) { console.warn('[SentCor] chat realtime:', e.message); }
   }
 
   function unsubscribeRealtime() {
-    if (_channel && getSupabase()) {
-      try { getSupabase().removeChannel(_channel); } catch (e) { /* noop */ }
-    }
-    _channel = null;
-    _subscribed = false;
+    if (_channel && getSupabase()) { try { getSupabase().removeChannel(_channel); } catch (e) { /* noop */ } }
+    _channel = null; _subscribed = false;
   }
 
-  /* -----------------------------------------------------
-     Public API
-     ----------------------------------------------------- */
   window.S.chat.fetchMessages = fetchMessages;
   window.S.chat.sendMessage = sendMessage;
   window.S.chat.appendMessage = appendMessage;

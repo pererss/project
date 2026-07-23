@@ -15,10 +15,7 @@ window.S.auth = window.S.auth || {};
     return supabase;
   }
 
-  var $authScreen, $mainScreen;
-  var $email, $password, $username;
-  var $authBtn, $authToggleBtn;
-  var $authError;
+  var $authScreen, $mainScreen, $email, $password, $username, $authBtn, $authToggleBtn, $authError;
 
   function cacheDom() {
     $authScreen = document.getElementById('auth-screen');
@@ -40,7 +37,7 @@ window.S.auth = window.S.auth || {};
   function toggleMode() {
     isLoginMode = !isLoginMode;
     hideAuthError();
-    if ($username) $username.style.display = isLoginMode ? 'none' : 'flex';
+    if ($username) $username.style.display = isLoginMode ? 'none' : 'block';
     if ($authBtn) $authBtn.textContent = isLoginMode ? 'Войти' : 'Зарегистрироваться';
     if ($authToggleBtn) {
       $authToggleBtn.innerHTML = isLoginMode
@@ -54,45 +51,36 @@ window.S.auth = window.S.auth || {};
     var email = ($email ? $email.value : '').trim();
     var password = ($password ? $password.value : '').trim();
     var uname = ($username ? $username.value : '').trim();
-
     if (!email || !password) { showAuthError('Заполните email и пароль'); return; }
     if (!isLoginMode && !uname) { showAuthError('Введите логин'); return; }
     if (password.length < 6) { showAuthError('Пароль должен быть не менее 6 символов'); return; }
-    if (!isLoginMode && uname.length < 3) { showAuthError('Логин должен быть не менее 3 символов'); return; }
+    if (!isLoginMode && uname.length < 3) { showAuthError('Логин минимум 3 символа'); return; }
 
     window.S.ui.showLoading(isLoginMode ? 'Вход...' : 'Регистрация...');
     try {
       var client = getSupabase();
-      if (!client) throw new Error('Supabase client не инициализирован');
+      if (!client) throw new Error('Supabase не инициализирован');
       var result;
       if (isLoginMode) {
         result = await client.auth.signInWithPassword({ email: email, password: password });
       } else {
         result = await client.auth.signUp({ email: email, password: password });
         if (result.data && result.data.user && !result.error) {
-          var profileRes = await client.from('profiles').upsert({
-            id: result.data.user.id,
-            username: uname,
-            email: email,
-            avatar_url: '',
-            status: 'online',
-            bio: '',
-            created_at: new Date().toISOString()
+          await client.from('profiles').upsert({
+            id: result.data.user.id, username: uname, email: email,
+            avatar_url: '', status: 'online', bio: '', created_at: new Date().toISOString()
           }, { onConflict: 'id' });
-          if (profileRes.error) console.warn('[SentCor] Profile upsert:', profileRes.error.message);
         }
       }
       if (result.error) throw result.error;
       currentUser = result.data.user;
-      // Fetch profile
       await fetchProfile();
       window.S.ui.showToast(isLoginMode ? 'Добро пожаловать!' : 'Аккаунт создан!', 'success');
       window.S.auth.onAuthSuccess(currentUser);
     } catch (err) {
-      var msg = (err && err.message) ? err.message : 'Неизвестная ошибка';
+      var msg = (err && err.message) ? err.message : 'Ошибка';
       if (msg.includes('Invalid login')) msg = 'Неверный email или пароль';
-      if (msg.includes('already registered')) msg = 'Пользователь уже зарегистрирован';
-      if (msg.includes('Password should')) msg = 'Пароль слишком короткий';
+      if (msg.includes('already registered')) msg = 'Email уже зарегистрирован';
       showAuthError(msg);
     } finally {
       window.S.ui.hideLoading();
@@ -104,7 +92,7 @@ window.S.auth = window.S.auth || {};
     try {
       var client = getSupabase();
       if (!client) return null;
-      var res = await client.from('profiles').select('*').eq('id', currentUser.id).single();
+      var res = await client.from('profiles').select('id, username, avatar_url, status, email, bio').eq('id', currentUser.id).single();
       if (res.data) currentProfile = res.data;
     } catch (e) { console.warn('[SentCor] fetchProfile:', e.message); }
     return currentProfile;
@@ -137,19 +125,17 @@ window.S.auth = window.S.auth || {};
     currentProfile = null;
     if ($authScreen) $authScreen.classList.add('active');
     if ($mainScreen) $mainScreen.classList.remove('active');
-    window.S.ui.showToast('Вы вышли из аккаунта', 'info');
+    window.S.ui.showToast('Вы вышли', 'info');
   }
 
   window.S.auth.init = function () {
     cacheDom();
     if ($authToggleBtn) $authToggleBtn.addEventListener('click', toggleMode);
     if ($authBtn) $authBtn.addEventListener('click', handleSubmit);
-    if ($password) $password.addEventListener('keydown', function (e) { if (e.key === 'Enter') handleSubmit(); });
-    if ($email) $email.addEventListener('keydown', function (e) { if (e.key === 'Enter') handleSubmit(); });
-    if ($username) {
-      $username.style.display = 'none';
-      $username.addEventListener('keydown', function (e) { if (e.key === 'Enter') handleSubmit(); });
-    }
+    [$password, $email, $username].forEach(function (el) {
+      if (el) el.addEventListener('keydown', function (e) { if (e.key === 'Enter') handleSubmit(); });
+    });
+    if ($username) $username.style.display = 'none';
     toggleMode();
     checkSession();
   };
