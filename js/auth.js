@@ -1,4 +1,4 @@
-// SENTCOR v11.0 — GitHub Auth & Resilient Profile Manager
+// SENTCOR v12.0 — Resilient Supabase Client Access
 (function() {
     "use strict";
 
@@ -7,12 +7,36 @@
 
     let supabase = null;
     let currentUser = null;
-    let isSignUp = false; // State to toggle between Sign In and Sign Up
+    let isSignUp = false;
+
+    /**
+     * Safely initializes the Supabase client.
+     * This function ensures that the Supabase module is loaded and ready.
+     * @returns {boolean} - True if successful, false otherwise.
+     */
+    function ensureSupabaseClient() {
+        if (supabase) return true;
+
+        if (S && S.supabase && typeof S.supabase.getClient === 'function') {
+            supabase = S.supabase.getClient();
+        } else {
+            console.error("[Auth] Critical: Supabase client module (S.supabase.getClient) is not available.");
+            S.ui.showErrorState("Ошибка инициализации", "Не удалось подключиться к базе данных.");
+            return false;
+        }
+        
+        if (!supabase) {
+            console.error("[Auth] Critical: Supabase client could not be initialized.");
+            S.ui.showErrorState("Ошибка инициализации", "Не удалось создать клиент базы данных.");
+            return false;
+        }
+        
+        return true;
+    }
 
     async function initSession() {
-        supabase = S.supabase.getClient();
-        
-        // This listener handles login, logout, and token refresh.
+        if (!ensureSupabaseClient()) return false;
+
         supabase.auth.onAuthStateChange(async (event, session) => {
             console.log(`[Auth] Auth state changed. Event: ${event}`);
             if (event === "SIGNED_OUT") {
@@ -24,7 +48,6 @@
             }
         });
 
-        // Check for existing session on initial load
         const { data, error } = await supabase.auth.getSession();
         if (error) {
             console.error("[Auth] Error getting session:", error);
@@ -37,26 +60,21 @@
             return true;
         }
         
-        return false; // No active session
+        return false;
     }
 
     async function handleSuccessfulLogin(user) {
         const profile = await fetchUserProfile(user);
-        recordLogin(user.id); // Fire-and-forget analytics
+        recordLogin(user.id);
 
         if (S.main && typeof S.main.init === 'function') {
-            S.main.init(user, profile); // Initialize main app UI with resilient profile data
+            S.main.init(user, profile);
         }
         S.ui.showApp();
     }
 
-    /**
-     * Fetches a user's profile. If the profile doesn't exist or an error occurs,
-     * it returns a default fallback profile object to prevent app crashes.
-     * @param {object} user - The authenticated user object.
-     * @returns {object} The user profile, either from the DB or a fallback.
-     */
     async function fetchUserProfile(user) {
+        if (!ensureSupabaseClient()) return;
         try {
             const { data, error, status } = await supabase
                 .from('profiles')
@@ -64,30 +82,23 @@
                 .eq('id', user.id)
                 .single();
 
-            if (error && status !== 406) { // 406 is a normal "no rows" error for .single()
-                throw error;
-            }
+            if (error && status !== 406) throw error;
 
             if (data) {
-                console.log("[Auth] Profile found:", data);
                 return { ...data, id: user.id };
             }
 
-            // If no data, create a fallback profile
-            console.warn("[Auth] Profile not found for user. Creating a fallback profile.");
             const fallbackProfile = {
                 id: user.id,
                 username: user.user_metadata.user_name || user.email.split('@')[0],
                 avatar_url: user.user_metadata.avatar_url || null,
                 status: 'online'
             };
-            // Attempt to create the profile in the background
             await supabase.from('profiles').upsert(fallbackProfile);
             return fallbackProfile;
 
         } catch (error) {
             console.error("[Auth] Error fetching profile:", error);
-            // Return a default object on any other failure to ensure app stability
             return {
                 id: user.id,
                 username: user.user_metadata.user_name || user.email.split('@')[0],
@@ -97,15 +108,12 @@
         }
     }
 
-    /**
-     * Silently records a login event. Fails quietly without impacting user experience.
-     */
     async function recordLogin(userId) {
+        if (!ensureSupabaseClient()) return;
         try {
             await supabase.from('daily_logins').insert({ user_id: userId });
         } catch (error) {
-            // Suppress error - this is a non-critical analytics feature.
-            // console.warn("[Auth] Could not record daily login:", error.message);
+            // Non-critical, fail silently
         }
     }
 
@@ -114,11 +122,8 @@
         const title = document.querySelector('#auth-screen .auth-title');
         const subtitle = document.querySelector('#auth-screen .auth-subtitle');
         const footer = document.getElementById('auth-footer');
-        const authCard = document.querySelector('.auth-card');
+        if (!form || !title || !subtitle || !footer) return;
 
-        if (!form || !title || !subtitle || !footer || !authCard) return;
-
-        // Clear previous dynamic content to prevent duplication on re-render
         form.innerHTML = '';
         footer.innerHTML = '';
         document.getElementById('github-login-btn')?.remove();
@@ -161,10 +166,8 @@
                 Войти через GitHub
             </button>
         `;
-        // Insert after the form, before the footer
         footer.insertAdjacentHTML('beforebegin', githubButtonHtml);
 
-        // Re-attach event listeners
         form.addEventListener('submit', isSignUp ? handleSignUp : handleSignIn);
         
         const toggleLink = document.getElementById('toggle-auth-mode');
@@ -183,6 +186,7 @@
     }
 
     async function handleGitHubLogin() {
+        if (!ensureSupabaseClient()) return;
         const { error } = await supabase.auth.signInWithOAuth({
             provider: 'github',
             options: {
@@ -196,6 +200,7 @@
 
     async function handleSignIn(e) {
         e.preventDefault();
+        if (!ensureSupabaseClient()) return;
         const form = e.target;
         const email = form.email.value;
         const password = form.password.value;
@@ -205,6 +210,7 @@
 
     async function handleSignUp(e) {
         e.preventDefault();
+        if (!ensureSupabaseClient()) return;
         const form = e.target;
         const email = form.email.value;
         const password = form.password.value;
@@ -212,14 +218,9 @@
 
         const { data, error } = await supabase.auth.signUp({ email, password });
 
-        if (error) {
-            return showAuthError(error.message);
-        }
-        if (!data.user) {
-            return showAuthError("Не удалось создать пользователя. Попробуйте еще раз.");
-        }
+        if (error) return showAuthError(error.message);
+        if (!data.user) return showAuthError("Не удалось создать пользователя.");
 
-        // Immediately create the profile entry
         const { error: profileError } = await supabase.from('profiles').upsert({
             id: data.user.id,
             username: username,
@@ -227,12 +228,9 @@
         });
 
         if (profileError) {
-            // This is a critical issue, but the user is already created.
-            // The resilient fetchUserProfile will handle this on next login.
             console.error("Failed to create profile post-signup:", profileError);
             showAuthError("Аккаунт создан, но не удалось создать профиль. Попробуйте войти.");
         } else {
-            // Success! The onAuthStateChange listener will now take over.
             console.log("Sign up successful, profile created.");
         }
     }
@@ -244,12 +242,10 @@
         errorEl.style.display = 'block';
     }
 
-    // This is the public function called by ui.js
     function showAuthUI() {
         renderAuthForm();
     }
 
-    // --- Public API ---
     S.auth = {
         initSession,
         showAuthUI
