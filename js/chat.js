@@ -1,133 +1,217 @@
-// SENTCOR v14 — Chat Core with Notifications
-(function() {
-    "use strict";
+/* =====================================================
+   SentCor — Chat Module
+   ===================================================== */
+window.S = window.S || {};
+window.S.chat = window.S.chat || {};
 
-    window.S = window.SENTCOR = window.S || {};
-    const S = window.S;
-    const sb = S.sb;
+(function () {
+  var supabase = null;
+  var activeFriendId = null;
+  var messages = [];
+  var _channel = null;
+  var _subscribed = false;
 
-    let currentChannelId = null;
-    let currentSubscription = null;
-    let profileCache = {};
-    const unreadCounts = {};
+  function getSupabase() {
+    if (!supabase && window.S && window.S.supabase) supabase = window.S.supabase;
+    return supabase;
+  }
 
-    function getChannelIdFromPayload(payload) {
-        const newMessage = payload.new;
-        if (payload.table === 'direct_messages') {
-            // For DMs, the "channel" is the other user's ID
-            return newMessage.sender_id === S.user.id ? newMessage.receiver_id : newMessage.sender_id;
-        }
-        return newMessage.channel_id;
+  /* -----------------------------------------------------
+     Fetch messages between current user and active friend
+     ----------------------------------------------------- */
+  async function fetchMessages(friendId) {
+    var user = window.S.auth.getUser();
+    if (!user || !friendId) { messages = []; renderMessages(); return []; }
+    try {
+      var client = getSupabase();
+      if (!client) return [];
+      window.S.ui.showLoading('Загрузка сообщений...');
+      var res = await client
+        .from('messages')
+        .select('id, sender_id, receiver_id, content, created_at, read')
+        .or('and(sender_id.eq.' + user.id + ',receiver_id.eq.' + friendId + '),and(sender_id.eq.' + friendId + ',receiver_id.eq.' + user.id + ')')
+        .order('created_at', { ascending: true });
+      if (res.error) throw res.error;
+      messages = res.data || [];
+      renderMessages();
+      return messages;
+    } catch (e) {
+      console.error('[SentCor] fetchMessages:', e.message);
+      messages = [];
+      renderMessages();
+      return [];
+    } finally {
+      window.S.ui.hideLoading();
     }
+  }
 
-    function showNotification(payload) {
-        const newMessage = payload.new;
-        const senderId = newMessage.sender_id;
-
-        S.chat.fetchProfiles([senderId]).then(() => {
-            const author = profileCache[senderId];
-            if (!author) return;
-
-            const content = S.ui.escapeHtml(newMessage.content.substring(0, 100));
-            const avatarUrl = S.ui.escapeHtml(author.avatar_url);
-            const displayName = S.ui.escapeHtml(author.display_name || author.username);
-
-            const avatar = avatarUrl
-                ? `<img src="${avatarUrl}" alt="Avatar" class="toast-avatar">`
-                : `<div class="avatar-initials toast-avatar">${displayName.charAt(0).toUpperCase()}</div>`;
-
-            const toastContent = `
-                <div class="message-toast">
-                    ${avatar}
-                    <div class="toast-body">
-                        <strong>${displayName}</strong>
-                        <p>${content}</p>
-                    </div>
-                </div>`;
-
-            S.toast.showCustom({
-                content: toastContent,
-                type: 'message',
-                position: 'bottom-right',
-                duration: 4000,
-                onClick: () => {
-                    const channelId = getChannelIdFromPayload(payload);
-                    const isDM = payload.table === 'direct_messages';
-                    if (isDM) {
-                        S.friends.openDM(channelId);
-                    } else {
-                        S.servers.selectChannel(channelId);
-                    }
-                }
-            });
-        });
+  /* -----------------------------------------------------
+     Send a message
+     ----------------------------------------------------- */
+  async function sendMessage(content) {
+    var user = window.S.auth.getUser();
+    if (!user || !activeFriendId) return;
+    if (!content || content.trim() === '') return;
+    try {
+      var client = getSupabase();
+      if (!client) return;
+      var res = await client.from('messages').insert({
+        sender_id: user.id,
+        receiver_id: activeFriendId,
+        content: content.trim(),
+        created_at: new Date().toISOString(),
+        read: false
+      });
+      if (res.error) throw res.error;
+      // The message will appear via realtime subscription
+    } catch (e) {
+      console.error('[SentCor] sendMessage:', e.message);
+      window.S.ui.showToast('Не удалось отправить сообщение', 'error');
     }
+  }
 
-    function updateUnreadBadges(channelId, isDM) {
-        if (!unreadCounts[channelId]) unreadCounts[channelId] = 0;
-        unreadCounts[channelId]++;
-
-        const selector = isDM 
-            ? `.friend-item[data-friend-id="${channelId}"]`
-            : `.sp-item[data-chid="${channelId}"]`;
-        
-        S.ui.addBadge(selector, unreadCounts[channelId]);
-
-        // Also update the main navigation badge
-        const totalUnread = Object.values(unreadCounts).reduce((sum, count) => sum + count, 0);
-        S.ui.addBadge('#nav-chats', totalUnread); // Assuming #nav-chats is the ID of the chats tab
+  /* -----------------------------------------------------
+     Append a single message (from realtime or optimistic)
+     ----------------------------------------------------- */
+  function appendMessage(msg) {
+    if (!msg) return;
+    // Deduplicate
+    var exists = messages.some(function (m) { return m.id === msg.id; });
+    if (!exists) {
+      messages.push(msg);
+      renderMessages();
+      scrollToBottom();
     }
+  }
 
-    function handleRealtimeMessageEvent(payload) {
-        const newMessage = payload.new;
-        if (!newMessage) return;
-
-        const channelId = getChannelIdFromPayload(payload);
-        const isDM = payload.table === 'direct_messages';
-        const isChatActive = (channelId === currentChannelId);
-
-        if (isChatActive) {
-            // If chat is open, just append the message
-            S.ui.appendMessage(newMessage, profileCache, isDM);
-        } else {
-            // If chat is not open, show notification and update badges
-            showNotification(payload);
-            updateUnreadBadges(channelId, isDM);
-        }
+  /* -----------------------------------------------------
+     Render messages into DOM
+     ----------------------------------------------------- */
+  function renderMessages() {
+    var container = document.getElementById('chat-messages');
+    if (!container) return;
+    var user = window.S.auth.getUser();
+    if (!user || !activeFriendId) {
+      container.innerHTML = '<div class="empty-state">' +
+        '<div class="empty-icon">&#128172;</div>' +
+        '<div class="empty-title">Выберите диалог</div>' +
+        '<div class="empty-text">Выберите чат слева, чтобы начать общение</div>' +
+        '</div>';
+      return;
     }
-    
-    async function loadChat(id, isDM = false) {
-        if (currentChannelId === id) return;
-        
-        S.ui.showLoadingScreen();
-        currentChannelId = id;
-        S.chat.currentChannelInfo = { id, isDM };
-
-        // Clear unread count for this chat
-        delete unreadCounts[id];
-        const selector = isDM ? `.friend-item[data-friend-id="${id}"]` : `.sp-item[data-chid="${id}"]`;
-        S.ui.removeBadge(selector);
-        const totalUnread = Object.values(unreadCounts).reduce((sum, count) => sum + count, 0);
-        S.ui.addBadge('#nav-chats', totalUnread);
-
-        // ... (rest of the loadChat logic remains the same)
+    if (messages.length === 0) {
+      container.innerHTML = '<div class="empty-state">' +
+        '<div class="empty-icon">&#128172;</div>' +
+        '<div class="empty-title">Нет сообщений</div>' +
+        '<div class="empty-text">Начните диалог первым!</div>' +
+        '</div>';
+      return;
     }
+    var html = '';
+    var lastDate = '';
+    messages.forEach(function (msg) {
+      var dateLabel = window.S.utils.getDateLabel(msg.created_at);
+      if (dateLabel !== lastDate) {
+        html += '<div class="date-separator"><span>' + window.S.utils.escapeHtml(dateLabel) + '</span></div>';
+        lastDate = dateLabel;
+      }
+      var isOwn = msg.sender_id === user.id;
+      var time = window.S.utils.formatTime(msg.created_at);
+      var escaped = window.S.utils.escapeHtml(msg.content);
+      html += '<div class="message ' + (isOwn ? 'message--own' : 'message--friend') + '">' +
+        '<div class="message-bubble">' +
+        '<div class="message-text">' + escaped + '</div>' +
+        '<div class="message-time">' + time + '</div>' +
+        '</div></div>';
+    });
+    container.innerHTML = html;
+    scrollToBottom();
+  }
 
-    // --- Public API ---
-    S.chat = {
-        loadMessages: (channelId) => loadChat(channelId, false),
-        loadDMs: (friendId) => loadChat(friendId, true),
-        handleRealtimeMessageEvent,
-        // ... other public methods like sendMessage, fetchProfiles etc.
-        currentChannelInfo: { id: null, isDM: false },
-        pCache: profileCache,
-        fetchProfiles: async (ids) => {
-            const missingIds = [...new Set(ids.filter(id => id && !profileCache[id]))];
-            if (missingIds.length === 0) return;
-            const { data, error } = await sb.from("profiles").select("id,username,display_name,avatar_url,status").in("id", missingIds);
-            if (error) throw error;
-            (data || []).forEach(p => profileCache[p.id] = p);
-        }
-    };
+  function scrollToBottom() {
+    var container = document.getElementById('chat-messages');
+    if (container) {
+      requestAnimationFrame(function () {
+        container.scrollTop = container.scrollHeight;
+      });
+    }
+  }
 
+  /* -----------------------------------------------------
+     Mark messages as read
+     ----------------------------------------------------- */
+  async function markRead(friendId) {
+    var user = window.S.auth.getUser();
+    if (!user || !friendId) return;
+    try {
+      var client = getSupabase();
+      if (!client) return;
+      await client
+        .from('messages')
+        .update({ read: true })
+        .eq('sender_id', friendId)
+        .eq('receiver_id', user.id)
+        .eq('read', false);
+    } catch (e) { /* noop */ }
+  }
+
+  /* -----------------------------------------------------
+     Realtime subscription
+     ----------------------------------------------------- */
+  function subscribeRealtime() {
+    if (_subscribed) return;
+    try {
+      var client = getSupabase();
+      if (!client) return;
+      _channel = client
+        .channel('public:messages')
+        .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages' }, function (payload) {
+          var msg = payload.new;
+          if (window.S.chat.activeFriendId &&
+            (msg.sender_id === window.S.chat.activeFriendId || msg.receiver_id === window.S.chat.activeFriendId)) {
+            window.S.chat.appendMessage(msg);
+            // Mark as read if it's from the friend
+            var user = window.S.auth.getUser();
+            if (user && msg.sender_id === window.S.chat.activeFriendId && msg.receiver_id === user.id) {
+              window.S.chat.markRead(window.S.chat.activeFriendId);
+            }
+          }
+          // Update conversation list
+          if (window.S.app && window.S.app.refreshConversations) window.S.app.refreshConversations();
+        })
+        .subscribe();
+      _subscribed = true;
+    } catch (e) {
+      console.warn('[SentCor] chat realtime subscribe:', e.message);
+    }
+  }
+
+  /* -----------------------------------------------------
+     Unsubscribe
+     ----------------------------------------------------- */
+  function unsubscribeRealtime() {
+    if (_channel && getSupabase()) {
+      try { getSupabase().removeChannel(_channel); } catch (e) { /* noop */ }
+    }
+    _channel = null;
+    _subscribed = false;
+  }
+
+  /* -----------------------------------------------------
+     Public API
+     ----------------------------------------------------- */
+  window.S.chat.fetchMessages = fetchMessages;
+  window.S.chat.sendMessage = sendMessage;
+  window.S.chat.appendMessage = appendMessage;
+  window.S.chat.markRead = markRead;
+  window.S.chat.renderMessages = renderMessages;
+  window.S.chat.subscribeRealtime = subscribeRealtime;
+  window.S.chat.unsubscribeRealtime = unsubscribeRealtime;
+  window.S.chat.setActiveFriend = function (id) {
+    activeFriendId = id;
+    window.S.chat.activeFriendId = id;
+    if (id) markRead(id);
+  };
+  window.S.chat.getActiveFriend = function () { return activeFriendId; };
+  window.S.chat.getMessages = function () { return messages; };
 })();

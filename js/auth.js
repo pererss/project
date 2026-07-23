@@ -1,122 +1,183 @@
-// ===============================================================
-// SentCor Auth Module v5.0 - Defensive & Robust
-// ===============================================================
-
-// Правило №1: Гарантия глобального пространства имен
+/* =====================================================
+   SentCor — Authentication Module
+   ===================================================== */
 window.S = window.S || {};
-window.S.ui = window.S.ui || {};
-window.S.utils = window.S.utils || {};
 window.S.auth = window.S.auth || {};
-window.S.app = window.S.app || {};
 
-(function(S) {
-    "use strict";
+(function () {
+  var supabase = null;
+  var currentUser = null;
+  var isLoginMode = true;
 
-    let supabase = null;
+  function getSupabase() {
+    if (!supabase && window.S && window.S.supabase) supabase = window.S.supabase;
+    return supabase;
+  }
 
-    /**
-     * Правило №3: Универсальная и всеядная функция получения клиента Supabase.
-     * @returns {object|null} Экземпляр клиента Supabase или null.
-     */
-    function getSupabase() {
-        if (supabase) return supabase;
-        
-        const client = window.supabaseClient ||
-                       window.S?.supabase ||
-                       (window.S?.auth?.getSupabaseClient && window.S.auth.getSupabaseClient()) ||
-                       null;
-        
-        if (client && !supabase) {
-            supabase = client;
-            console.log('[Auth] Supabase client acquired.');
-        }
-        
-        return supabase;
+  /* -----------------------------------------------------
+     DOM references (populated after DOMContentLoaded)
+     ----------------------------------------------------- */
+  var $authScreen, $mainScreen;
+  var $email, $password, $username;
+  var $authBtn, $authToggleBtn;
+  var $authError;
+
+  /* -----------------------------------------------------
+     Initialise DOM handles
+     ----------------------------------------------------- */
+  function cacheDom() {
+    $authScreen = document.getElementById('auth-screen');
+    $mainScreen = document.getElementById('main-app-screen');
+    $email = document.getElementById('auth-email');
+    $password = document.getElementById('auth-password');
+    $username = document.getElementById('auth-username');
+    $authBtn = document.getElementById('auth-submit');
+    $authToggleBtn = document.getElementById('auth-toggle');
+    $authError = document.getElementById('auth-error');
+  }
+
+  function showAuthError(msg) {
+    if ($authError) { $authError.textContent = msg; $authError.style.display = 'block'; }
+    window.S.ui.showToast(msg, 'error');
+  }
+  function hideAuthError() { if ($authError) { $authError.textContent = ''; $authError.style.display = 'none'; } }
+
+  /* -----------------------------------------------------
+     Toggle login / register mode
+     ----------------------------------------------------- */
+  function toggleMode() {
+    isLoginMode = !isLoginMode;
+    hideAuthError();
+    if ($username) $username.style.display = isLoginMode ? 'none' : 'flex';
+    if ($authBtn) $authBtn.textContent = isLoginMode ? 'Войти' : 'Зарегистрироваться';
+    if ($authToggleBtn) {
+      $authToggleBtn.innerHTML = isLoginMode
+        ? 'Нет аккаунта? <span>Зарегистрироваться</span>'
+        : 'Уже есть аккаунт? <span>Войти</span>';
     }
+  }
 
-    /**
-     * Отображает UI для входа по email (Magic Link).
-     */
-    function showAuthUI() {
-        const form = document.getElementById('auth-form');
-        const errorMessageEl = document.getElementById('auth-error-message');
-        if (!form || !errorMessageEl) {
-            console.error('[Auth] Auth form elements not found in DOM.');
-            return;
+  /* -----------------------------------------------------
+     Submit handler
+     ----------------------------------------------------- */
+  async function handleSubmit() {
+    hideAuthError();
+    var email = ($email ? $email.value : '').trim();
+    var password = ($password ? $password.value : '').trim();
+    var uname = ($username ? $username.value : '').trim();
+
+    if (!email || !password) { showAuthError('Заполните email и пароль'); return; }
+    if (!isLoginMode && !uname) { showAuthError('Введите логин'); return; }
+    if (password.length < 6) { showAuthError('Пароль должен быть не менее 6 символов'); return; }
+
+    window.S.ui.showLoading(isLoginMode ? 'Вход...' : 'Регистрация...');
+    try {
+      var client = getSupabase();
+      if (!client) throw new Error('Supabase client не инициализирован');
+      var result;
+      if (isLoginMode) {
+        result = await client.auth.signInWithPassword({ email: email, password: password });
+      } else {
+        result = await client.auth.signUp({ email: email, password: password });
+        if (result.data && result.data.user && !result.error) {
+          // Create profile row
+          var profileRes = await client.from('profiles').upsert({
+            id: result.data.user.id,
+            username: uname,
+            email: email,
+            avatar_url: '',
+            status: 'online',
+            created_at: new Date().toISOString()
+          }, { onConflict: 'id' });
+          if (profileRes.error) console.warn('[SentCor] Profile upsert warning:', profileRes.error.message);
         }
-
-        form.innerHTML = `
-            <div class="input-group">
-                <label for="email" style="display:none;">Email</label>
-                <input type="email" id="email" name="email" required placeholder="you@example.com" class="search-input" style="text-align:center;">
-            </div>
-            <button type="submit" class="btn-primary" style="width:100%; margin-top:16px;">Получить ссылку для входа</button>
-        `;
-
-        form.onsubmit = async (e) => {
-            e.preventDefault();
-            errorMessageEl.textContent = '';
-            const email = e.target.email.value.trim();
-            const client = getSupabase();
-
-            if (!email) {
-                errorMessageEl.textContent = 'Пожалуйста, введите ваш email.';
-                return;
-            }
-            if (!client) {
-                errorMessageEl.textContent = 'Ошибка: Клиент базы данных не инициализирован.';
-                return;
-            }
-
-            try {
-                S.ui.showLoading('Отправка ссылки...');
-                const { error } = await client.auth.signInWithOtp({ 
-                    email,
-                    options: {
-                        emailRedirectTo: window.location.origin,
-                    }
-                });
-                if (error) throw error;
-                
-                form.innerHTML = `<p style="text-align:center; color: var(--text-secondary);">Проверьте вашу почту. Мы отправили ссылку для быстрого входа.</p>`;
-                S.toast.show('Ссылка для входа отправлена!', { type: 'success', duration: 5000 });
-
-            } catch (error) {
-                console.error('[Auth] Sign-in error:', error);
-                const message = error.message || 'Не удалось отправить ссылку. Попробуйте еще раз.';
-                errorMessageEl.textContent = message;
-                S.toast.show(message, { type: 'error' });
-            } finally {
-                // Правило №3: Гарантированное скрытие лоадера
-                S.ui.hideLoading();
-            }
-        };
+      }
+      if (result.error) throw result.error;
+      currentUser = result.data.user;
+      window.S.ui.showToast(isLoginMode ? 'Добро пожаловать!' : 'Аккаунт создан!', 'success');
+      window.S.auth.onAuthSuccess(currentUser);
+    } catch (err) {
+      var msg = (err && err.message) ? err.message : 'Неизвестная ошибка';
+      if (msg.includes('Invalid login')) msg = 'Неверный email или пароль';
+      if (msg.includes('already registered')) msg = 'Пользователь уже зарегистрирован';
+      if (msg.includes('Password should')) msg = 'Пароль слишком короткий';
+      showAuthError(msg);
+    } finally {
+      window.S.ui.hideLoading();
     }
-    
-    /**
-     * Выполняет выход пользователя из системы.
-     */
-    async function signOut() {
-        const client = getSupabase();
-        if (!client) {
-            console.warn('[Auth] Supabase client not available for sign out.');
-            window.location.reload();
-            return;
+  }
+
+  /* -----------------------------------------------------
+     Check existing session
+     ----------------------------------------------------- */
+  async function checkSession() {
+    try {
+      var client = getSupabase();
+      if (!client) return null;
+      var res = await client.auth.getSession();
+      if (res.data && res.data.session && res.data.session.user) {
+        currentUser = res.data.session.user;
+        window.S.auth.onAuthSuccess(currentUser);
+        return currentUser;
+      }
+    } catch (e) { console.warn('[SentCor] Session check:', e.message); }
+    return null;
+  }
+
+  /* -----------------------------------------------------
+     Logout
+     ----------------------------------------------------- */
+  async function logout() {
+    try {
+      var client = getSupabase();
+      if (client) {
+        // Set status to offline before signing out
+        if (currentUser) {
+          await client.from('profiles').upsert({ id: currentUser.id, status: 'offline' }, { onConflict: 'id' });
         }
-        try {
-            S.ui.showLoading('Выход...');
-            await client.auth.signOut();
-        } catch (error) {
-            console.error('[Auth] Sign-out error:', error);
-        } finally {
-            // Перезагружаем страницу в любом случае, чтобы сбросить состояние
-            window.location.reload();
-        }
+        await client.auth.signOut();
+      }
+    } catch (e) { console.warn('[SentCor] Logout:', e.message); }
+    currentUser = null;
+    if ($authScreen) $authScreen.classList.add('active');
+    if ($mainScreen) $mainScreen.classList.remove('active');
+    window.S.ui.showToast('Вы вышли из аккаунта', 'info');
+  }
+
+  /* -----------------------------------------------------
+     Public API
+     ----------------------------------------------------- */
+  window.S.auth.init = function () {
+    cacheDom();
+    if ($authToggleBtn) $authToggleBtn.addEventListener('click', toggleMode);
+    if ($authBtn) $authBtn.addEventListener('click', handleSubmit);
+    if ($password) $password.addEventListener('keydown', function (e) { if (e.key === 'Enter') handleSubmit(); });
+    if ($email) $email.addEventListener('keydown', function (e) { if (e.key === 'Enter') handleSubmit(); });
+    if ($username) {
+      $username.style.display = 'none';
+      $username.addEventListener('keydown', function (e) { if (e.key === 'Enter') handleSubmit(); });
     }
+    toggleMode(); // set initial state
+    checkSession();
+  };
 
-    // Экспортируем публичные методы в пространство имен S.auth
-    S.auth.getSupabaseClient = getSupabase;
-    S.auth.showAuthUI = showAuthUI;
-    S.auth.signOut = signOut;
+  window.S.auth.onAuthSuccess = function onAuthSuccess(user) {
+    currentUser = user;
+    if ($authScreen) $authScreen.classList.remove('active');
+    if ($mainScreen) $mainScreen.classList.add('active');
+    // Trigger app initialization after auth
+    if (window.S.app && window.S.app.onLogin) window.S.app.onLogin(user);
+  };
 
-})(window.S);
+  window.S.auth.logout = logout;
+  window.S.auth.getUser = function () { return currentUser; };
+  window.S.auth.refreshUser = async function () {
+    try {
+      var client = getSupabase();
+      if (!client) return currentUser;
+      var res = await client.auth.getUser();
+      if (res.data && res.data.user) currentUser = res.data.user;
+    } catch (e) { /* noop */ }
+    return currentUser;
+  };
+})();

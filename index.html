@@ -1,184 +1,143 @@
 <!DOCTYPE html>
 <html lang="ru">
 <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>SentCor — Мессенджер</title>
-    <meta name="description" content="SentCor — отказоустойчивый мессенджер с голосовыми чатами и друзьями." />
-    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>💬</text></svg>" />
-    
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-    
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" integrity="sha512-iecdLmaskl7CVkqkXNQ/ZH/XLlvWZOJyj7Yy7tcenmpD1ypASozpmT/E0iPtmFIB46ZmdtAc9eNBvH0H/ZpiBw==" crossorigin="anonymous" referrerpolicy="no-referrer" />
-    <link rel="stylesheet" href="css/style.css">
-
-    <!-- Core Libraries -->
-    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    <script src="https://cdn.jsdelivr.net/npm/livekit-client@2/dist/livekit-client.umd.min.js"></script>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SentCor — Мессенджер</title>
+  <link rel="stylesheet" href="style.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 </head>
 <body>
 
-    <div id="app">
-        <!-- =============================================================== -->
-        <!-- Loading Screen: Гарантированно скрывается через 4с -->
-        <!-- =============================================================== -->
-        <div id="loading-screen" class="screen visible">
-            <div class="preloader-container">
-                <div class="preloader-spinner"></div>
-                <p id="loading-status-text" class="preloader-text">Инициализация...</p>
-            </div>
-        </div>
-
-        <!-- =============================================================== -->
-        <!-- Auth Screen: Экран входа в приложение -->
-        <!-- =============================================================== -->
-        <div id="auth-screen" class="screen">
-            <div class="auth-card">
-                <div class="auth-header">
-                    <h1 class="auth-title">Вход в SentCor</h1>
-                    <p class="auth-subtitle">Введите ваш email для получения ссылки</p>
-                </div>
-                <div id="auth-error-message" class="auth-error-message"></div>
-                <form id="auth-form" novalidate></form>
-            </div>
-        </div>
-
-        <!-- =============================================================== -->
-        <!-- Main App Screen: Основной интерфейс мессенджера -->
-        <!-- =============================================================== -->
-        <div id="main-app-screen" class="screen">
-            <div class="app-layout">
-                
-                <!-- 1. Левая навигационная колонка (Серверы) -->
-                <nav class="servers-nav">
-                    <div class="server-item active" data-server-id="home" aria-label="Личные сообщения">
-                        <i class="fa-solid fa-comments server-item-icon"></i>
-                    </div>
-                    <div class="nav-separator"></div>
-                    <!-- Динамический список серверов будет здесь -->
-                    <div class="server-item server-item-add" aria-label="Создать сервер">
-                        <i class="fa-solid fa-plus server-item-icon"></i>
-                    </div>
-                </nav>
-
-                <!-- 2. Средняя панель (Чаты и друзья) -->
-                <aside class="sidebar-chats">
-                    <header class="sidebar-header">
-                        <input type="text" id="global-search-input" class="search-input" placeholder="Найти пользователя или чат...">
-                    </header>
-                    
-                    <div class="sidebar-content" id="friends-list-container">
-                        <h2 class="sidebar-section-title">Личные сообщения</h2>
-                        <div id="friends-list">
-                            <!-- Динамический список друзей будет здесь -->
-                        </div>
-                    </div>
-
-                    <footer class="user-profile-bar">
-                        <div id="profile-avatar-wrapper" class="profile-avatar-wrapper">
-                            <!-- Аватар пользователя будет здесь -->
-                        </div>
-                        <div class="profile-info">
-                            <div id="profile-username" class="profile-name">Загрузка...</div>
-                            <div id="profile-subtext" class="profile-subtext">в сети</div>
-                        </div>
-                        <div class="profile-actions">
-                            <button class="btn-icon" aria-label="Отключить микрофон"><i class="fa-solid fa-microphone-slash"></i></button>
-                            <button class="btn-icon" aria-label="Настройки"><i class="fa-solid fa-gear"></i></button>
-                        </div>
-                    </footer>
-                </aside>
-
-                <!-- 3. Главная зона (Контент чата) -->
-                <main class="chat-container">
-                    <header class="chat-header">
-                        <div class="chat-title-section">
-                            <i class="fa-solid fa-at chat-title-icon"></i>
-                            <span id="chat-title-text" class="chat-title-text">Друзья</span>
-                        </div>
-                        <nav id="chat-tabs" class="chat-tabs">
-                            <button class="tab-item" data-tab="online">В сети</button>
-                            <button class="tab-item" data-tab="all">Все</button>
-                            <button class="tab-item" data-tab="pending">В ожидании</button>
-                            <button class="tab-item active" data-tab="add-friend">Добавить в друзья</button>
-                        </nav>
-                    </header>
-
-                    <div id="main-content-area" class="chat-content">
-                        <!-- Приветствие по умолчанию -->
-                        <div id="view-welcome" class="content-view">
-                            <div class="chat-welcome">
-                                <div class="welcome-icon">👋</div>
-                                <h2 class="welcome-title">Выберите друга</h2>
-                                <p>Выберите друга из списка, чтобы начать общение.</p>
-                            </div>
-                        </div>
-
-                        <!-- Виджет "Добавить в друзья" -->
-                        <div id="view-add-friend" class="content-view visible">
-                            <div class="add-friend-container">
-                                <h3>Добавить друга</h3>
-                                <p>Вы можете добавить друга по его уникальному имени пользователя.</p>
-                                <form id="add-friend-form" class="add-friend-form" novalidate>
-                                    <input type="text" id="add-friend-username" class="search-input" placeholder="Введите имя пользователя..." required autocomplete="off">
-                                    <button type="submit" class="btn-primary">Отправить запрос</button>
-                                </form>
-                                <div id="add-friend-status" class="add-friend-status"></div>
-                            </div>
-                        </div>
-                        
-                        <!-- Область для сообщений (будет управляться JS) -->
-                        <div id="view-messages" class="content-view"></div>
-                    </div>
-
-                    <form id="chat-input-form" class="chat-input-form">
-                        <div class="chat-input-wrapper">
-                            <button type="button" class="btn-icon attach-button" aria-label="Прикрепить файл"><i class="fa-solid fa-plus-circle"></i></button>
-                            <input type="text" id="chat-input-field" class="chat-input" placeholder="Написать сообщение..." disabled>
-                            <button type="submit" class="btn-icon send-button" aria-label="Отправить" disabled><i class="fa-solid fa-paper-plane"></i></button>
-                        </div>
-                    </form>
-                </main>
-
-            </div>
-        </div>
+  <!-- ===================================================
+       AUTH SCREEN
+       =================================================== -->
+  <div id="auth-screen" class="auth-screen active">
+    <div class="auth-card">
+      <div class="auth-logo">
+        <h1>SentCor</h1>
+        <p>Безопасный мессенджер нового поколения</p>
+      </div>
+      <div class="auth-form">
+        <input type="email" id="auth-email" class="input" placeholder="Email" autocomplete="email">
+        <input type="password" id="auth-password" class="input" placeholder="Пароль" autocomplete="current-password">
+        <input type="text" id="auth-username" class="input" placeholder="Логин" autocomplete="username" style="display:none;">
+        <div id="auth-error" class="auth-error"></div>
+        <button id="auth-submit" class="btn btn--accent" style="width:100%;">Войти</button>
+      </div>
+      <div id="auth-toggle" class="auth-toggle">
+        Нет аккаунта? <span>Зарегистрироваться</span>
+      </div>
     </div>
-  
-    <div id="toast-container"></div>
+  </div>
 
-    <!-- =============================================================== -->
-    <!-- Загрузка скриптов в правильном порядке -->
-    <!-- =============================================================== -->
-    <script src="js/config.js"></script>
-    <script src="js/toast.js"></script>
-    <script src="js/ui.js"></script>
-    <script src="js/auth.js"></script>
-    <script src="js/voice.js"></script>
-    <script src="js/app.js"></script>
-    <script src="js/main.js"></script>
-    
-    <!-- Main Entry Point -->
-    <script>
-      document.addEventListener('DOMContentLoaded', () => {
-        try {
-            if (window.S && S.main && S.main.init) {
-                S.main.init();
-            } else {
-                console.error("Fatal: S.main.init() not found. Application cannot start.");
-                // Попытка показать ошибку через UI, если он успел загрузиться
-                if (window.S && S.ui && S.ui.showErrorState) {
-                    S.ui.showErrorState('Критическая ошибка: Не удалось запустить приложение.');
-                }
-            }
-        } catch (error) {
-            console.error("Fatal error during initialization:", error);
-            if (window.S && S.ui && S.ui.showErrorState) {
-                S.ui.showErrorState(`Критическая ошибка: ${error.message}`);
-            }
-        }
-      });
-    </script>
+  <!-- ===================================================
+       MAIN APP SCREEN
+       =================================================== -->
+  <div id="main-app-screen" class="main-screen">
+
+    <!-- Navigation Rail -->
+    <nav class="nav-rail">
+      <div class="nav-icon active" title="Личные сообщения">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+        </svg>
+      </div>
+      <div class="nav-divider"></div>
+      <div class="nav-icon" title="Добавить">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <line x1="12" y1="5" x2="12" y2="19"/>
+          <line x1="5" y1="12" x2="19" y2="12"/>
+        </svg>
+      </div>
+    </nav>
+
+    <!-- Sidebar -->
+    <aside class="sidebar">
+      <div class="sidebar-header">
+        <h2>Диалоги</h2>
+        <input type="text" id="sidebar-search" class="sidebar-search" placeholder="Поиск...">
+      </div>
+      <div id="conversations-list" class="conversations">
+        <div class="empty-state empty-state--small">
+          <div class="empty-icon">&#128172;</div>
+          <div class="empty-text">Загрузка...</div>
+        </div>
+      </div>
+      <div id="profile-bar" class="profile-bar">
+        <div class="avatar avatar--letter"><span class="avatar-initial">U</span></div>
+        <div class="profile-info">
+          <div class="profile-name">Загрузка...</div>
+          <div class="profile-status">В сети</div>
+        </div>
+      </div>
+    </aside>
+
+    <!-- Chat Area -->
+    <main class="chat-area">
+      <!-- Header -->
+      <div class="chat-header">
+        <div id="chat-header-avatar"></div>
+        <div class="chat-header-info">
+          <div id="chat-header-name">Выберите диалог</div>
+          <div id="chat-header-status" class="header-status"></div>
+        </div>
+        <nav class="tab-nav">
+          <button class="tab-btn active" data-tab="chat">Чат</button>
+          <button class="tab-btn" data-tab="friends">Все друзья</button>
+          <button class="tab-btn" data-tab="pending">В ожидании</button>
+          <button class="tab-btn tab-btn--accent" data-tab="addfriend">Добавить в друзья</button>
+        </nav>
+      </div>
+
+      <!-- Tab: Chat -->
+      <div id="tab-chat" class="tab-content active">
+        <div id="chat-messages" class="messages-area">
+          <div class="empty-state">
+            <div class="empty-icon">&#128172;</div>
+            <div class="empty-title">Выберите диалог</div>
+            <div class="empty-text">Выберите чат слева, чтобы начать общение</div>
+          </div>
+        </div>
+        <div class="message-input-area">
+          <textarea id="message-input" class="message-input" placeholder="Написать сообщение..." rows="1"></textarea>
+          <button id="send-btn" class="send-btn" title="Отправить">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <line x1="22" y1="2" x2="11" y2="13"/>
+              <polygon points="22 2 15 22 11 13 2 9 22 2"/>
+            </svg>
+          </button>
+        </div>
+      </div>
+
+      <!-- Tab: Friends -->
+      <div id="tab-friends" class="tab-content">
+        <div id="friends-list-content" class="friends-list"></div>
+      </div>
+
+      <!-- Tab: Pending -->
+      <div id="tab-pending" class="tab-content">
+        <div id="pending-list-content" class="pending-list"></div>
+      </div>
+
+      <!-- Tab: Add Friend -->
+      <div id="tab-addfriend" class="tab-content">
+        <div id="addfriend-content" class="addfriend-form"></div>
+      </div>
+    </main>
+  </div>
+
+  <!-- ===================================================
+       SCRIPTS
+       =================================================== -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="js/config.js"></script>
+  <script src="js/ui.js"></script>
+  <script src="js/auth.js"></script>
+  <script src="js/friends.js"></script>
+  <script src="js/chat.js"></script>
+  <script src="js/app.js"></script>
 </body>
 </html>

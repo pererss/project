@@ -1,14 +1,18 @@
-// SENTCOR v4 — Configuration
-window.SENTCOR_CONFIG = {
-  SUPABASE_URL: "https://sbjcaednbqzmaemqgqfu.supabase.co",
-  SUPABASE_ANON_KEY: "sb_publishable_L8uG-22xzKFGHrX--GO3ZQ_Pj8pU4v7",
-  LIVEKIT_URL: "wss://sentcor-mya3q8re.livekit.cloud",
-  APP_NAME: "SENTCOR",
-  APP_VERSION: "4.0.0",
-  MAX_MESSAGE_LENGTH: 2000,
-  COINS_PER_DAY_BASE: 10,
-  MAX_STREAK_BONUS: 100,
-  USERNAME_CHANGE_COOLDOWN_DAYS: 7,
-  THEMES: ["monochrome","caramel","oled","midnight"],
-  DEFAULT_THEME: "monochrome"
+/* =====================================================
+   SentCor — Configuration & Supabase Client
+   ===================================================== */
+window.S = window.S || {};
+window.S.config = {
+  SUPABASE_URL: "https://kbhjamuodmrrvklcyjdv.supabase.co",
+  SUPABASE_KEY: "sb_publishable_V-tjO1rW-6ltXevYbMte4Q_SXD9-QCB"
 };
+
+// Supabase CDN initialization
+if (window.supabase) {
+  window.S.supabase = window.supabase.createClient(
+    window.S.config.SUPABASE_URL,
+    window.S.config.SUPABASE_KEY
+  );
+} else {
+  console.error("[SentCor] Supabase CDN script is missing!");
+}
