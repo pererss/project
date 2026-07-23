@@ -1,92 +1,96 @@
-// SENTCOR v1.0 — Main App Initializer
-(function() {
-    "use strict";
+// SENTCOR v4.1 — Main App Initializer with Safe Namespace & Async Profile
+window.S = window.S || {};
+window.S.ui = window.S.ui || {};
+window.S.utils = window.S.utils || {};
+window.S.auth = window.S.auth || {};
 
-    window.S = window.SENTCOR = window.S || {};
-    const S = window.S;
+(function(S) {
+    "use strict";
 
     let currentUser = null;
     let userProfile = null;
 
     /**
-     * Initializes the main application screen.
-     * This function is designed to be resilient and render empty states 
-     * instead of crashing if data is incomplete.
-     * @param {object} user - The authenticated user object from Supabase.
-     * @param {object} profile - The user profile data (could be a fallback object).
+     * Simple HTML escaping utility.
+     * @param {string} str - The string to escape.
+     * @returns {string} The escaped string.
      */
-    function init(user, profile) {
-        currentUser = user;
-        userProfile = profile;
+    S.utils.escapeHtml = function(str) {
+        if (typeof str !== 'string') return '';
+        return str
+            .replace(/&/g, "&amp;")
+            .replace(/</g, "&lt;")
+            .replace(/>/g, "&gt;")
+            .replace(/"/g, "&quot;")
+            .replace(/'/g, "&#039;");
+    };
+
+    /**
+     * Fetches the current user's profile data from Supabase.
+     * @returns {Promise<object|null>} The profile data or null if not found.
+     */
+    async function fetchUserProfile() {
+        const supabase = S.auth.getSupabaseClient();
+        if (!supabase) {
+            console.error("[Main] Supabase client is not available.");
+            return null;
+        }
+
+        try {
+            const { data: { user } } = await supabase.auth.getUser();
+            if (!user) {
+                console.log("[Main] No authenticated user found.");
+                return null;
+            }
+            currentUser = user;
+
+            const { data: profile, error } = await supabase
+                .from('profiles')
+                .select('username, avatar_url')
+                .eq('id', user.id)
+                .single();
+
+            if (error) throw error;
+            
+            // Combine user and profile data into a single object
+            return {
+                ...user,
+                ...profile
+            };
+
+        } catch (error) {
+            console.error("[Main] Error fetching user profile:", error);
+            return null;
+        }
+    }
+
+    /**
+     * Initializes the main application.
+     * Fetches user data and then kicks off the rest of the app's initialization.
+     */
+    async function init() {
+        console.log("[Main] Initializing...");
+
+        userProfile = await fetchUserProfile();
 
         console.log("[Main] Initializing main application UI with profile:", userProfile);
 
-        const mainAppScreen = document.getElementById('main-app-screen');
-        if (!mainAppScreen) {
-            console.error("[Main] Critical error: #main-app-screen not found!");
-            return;
+        if (userProfile) {
+            // If profile is loaded, initialize the main app components
+            if (S.app && typeof S.app.init === 'function') {
+                S.app.init(userProfile);
+            } else {
+                console.error("[Main] S.app.init() is not available.");
+            }
+        } else {
+            // If no profile, it might mean the user is not logged in.
+            // The auth module should handle redirection to the login page.
+            console.log("[Main] No user profile loaded. Auth module should take over.");
+            // Potentially hide loading screen and show auth screen
+            if (S.ui.hideLoading) S.ui.hideLoading();
+            const authScreen = document.getElementById('auth-screen');
+            if (authScreen) authScreen.classList.add('visible');
         }
-
-        // Basic layout structure
-        const appHtml = `
-            <div class="app-layout">
-                <div class="sidebar">
-                    <div class="sidebar-header">Профиль</div>
-                    <div id="profile-container"></div>
-                    <div class="sidebar-header">Друзья</div>
-                    <div id="friends-list-container"></div>
-                </div>
-                <div class="main-content">
-                    <div class="chat-header">Добро пожаловать!</div>
-                    <div id="chat-container"></div>
-                </div>
-            </div>
-        `;
-        mainAppScreen.innerHTML = appHtml;
-
-        // Render components safely
-        renderProfile();
-        renderFriendsList();
-        renderChatWelcome();
-    }
-
-    function renderProfile() {
-        const container = document.getElementById('profile-container');
-        if (!container) return;
-
-        // Use fallback data if profile is incomplete
-        const username = S.ui.escapeHtml(userProfile.username || currentUser.email.split('@')[0]);
-        const avatarUrl = userProfile.avatar_url || 'https://via.placeholder.com/40';
-
-        container.innerHTML = `
-            <div class="profile-widget">
-                <img src="${avatarUrl}" alt="Avatar" class="avatar">
-                <span>${username}</span>
-            </div>
-        `;
-    }
-
-    function renderFriendsList() {
-        const container = document.getElementById('friends-list-container');
-        if (!container) return;
-
-        // Safely handle missing friends data
-        const friends = userProfile.friends || [];
-
-        if (friends.length === 0) {
-            container.innerHTML = '<div class="empty-state">У вас пока нет друзей.</div>';
-            return;
-        }
-
-        // Render list (placeholder)
-        container.innerHTML = `<ul>${friends.map(f => `<li>${S.ui.escapeHtml(f.username)}</li>`).join('')}</ul>`;
-    }
-
-    function renderChatWelcome() {
-        const container = document.getElementById('chat-container');
-        if (!container) return;
-
-        container.innerHTML = '<div class="empty-state">Выберите чат, чтобы начать общение.</div>';
     }
 
     // --- Public API ---
@@ -94,4 +98,4 @@
         init
     };
 
-})();
+})(window.S);

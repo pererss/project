@@ -21,6 +21,9 @@
   <!-- Global Namespace -->
   <script>
     window.S = window.SENTCOR = window.S || {};
+    window.S.ui = window.S.ui || {};
+    window.S.utils = window.S.utils || {};
+    window.S.auth = window.S.auth || {};
   </script>
 </head>
 <body>
@@ -105,7 +108,7 @@
             </header>
 
             <div id="main-content-area" class="chat-content">
-                <!-- Content views will be injected and toggled here -->
+                <!-- Content views will be toggled here -->
                 <div id="view-friends" class="content-view visible">
                     <div class="chat-welcome">
                         <div class="welcome-icon">👋</div>
@@ -143,17 +146,17 @@
   <!-- Module Loading Order -->
   <script src="js/config.js"></script>
   <script src="js/supabase.js"></script>
-  <script src="js/ui.js"></script>
   <script src="js/toast.js"></script>
+  <script src="js/ui.js"></script>
   <script src="js/auth.js"></script>
   <script src="js/app.js"></script>
-  <script src="js/main.js"></script>
-
+  
   <!-- Main Entry Point -->
+  <script src="js/main.js"></script>
   <script>
-    document.addEventListener('DOMContentLoaded', async () => {
-      if (window.S?.main?.init) {
-        window.S.main.init();
+    document.addEventListener('DOMContentLoaded', () => {
+      if (window.S && S.main && S.main.init) {
+        S.main.init();
       } else {
         console.error("Fatal: S.main.init() not found.");
         document.body.innerHTML = '<div style="color:red; text-align:center; padding-top: 50px;">Критическая ошибка: Не удалось запустить приложение.</div>';

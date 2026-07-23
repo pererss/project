@@ -1,16 +1,12 @@
-// SENTCOR v4.0 — Real Data, Avatar Fallbacks & Active Tabs
+// SENTCOR v4.1 — Real Data, with Safe Namespace
 window.S = window.S || {};
+window.S.ui = window.S.ui || {};
+window.S.utils = window.S.utils || {};
+window.S.auth = window.S.auth || {};
 
-function getClient() {
-    return window.supabaseClient || 
-           (window.S?.auth?.getSupabaseClient && window.S.auth.getSupabaseClient()) || 
-           window.S?.supabase || 
-           null;
-}
-
-S.app = (function () {
+(function(S) {
     let friendsCache = [];
-    let currentUser = null;
+    let currentUserProfile = null;
 
     const elements = {
         friendsList: null,
@@ -22,7 +18,7 @@ S.app = (function () {
     };
 
     function getFriendHTML(friend) {
-        const username = friend.username || 'Безымянный';
+        const username = S.utils.escapeHtml(friend.username || 'Безымянный');
         const status = friend.is_online ? 'online' : 'offline';
         
         return `
@@ -51,22 +47,18 @@ S.app = (function () {
     async function fetchAndRenderFriends() {
         if (!elements.friendsList) return;
 
-        // elements.friendsList.innerHTML = S.ui.getSkeletonHTML('friend', 5); // Assumes getSkeletonHTML exists
-
-        const supabase = getClient();
-        if (!supabase || !currentUser) {
+        const supabase = S.auth.getSupabaseClient();
+        if (!supabase || !currentUserProfile) {
             console.warn('[App] Supabase client or user not ready, skipping friends fetch.');
             elements.friendsList.innerHTML = '<div class="error-placeholder">Не удалось подключиться.</div>';
             return;
         }
 
         try {
-            // This is a placeholder query. A real app would have a 'friends' table.
-            // For now, we'll fetch all profiles except our own to simulate a user list.
             const { data, error } = await supabase
                 .from('profiles')
                 .select('id, username, avatar_url, is_online')
-                .neq('id', currentUser.id); // Don't show self in friends list
+                .neq('id', currentUserProfile.id); 
 
             if (error) throw error;
 
@@ -80,38 +72,17 @@ S.app = (function () {
         }
     }
     
-    async function fetchAndRenderUserProfile() {
-        try {
-            const supabase = getClient();
-            if (!supabase) return;
+    function renderUserProfile() {
+        if (!currentUserProfile) return;
 
-            const { data: { user } } = await supabase.auth.getUser();
-            currentUser = user; // Cache the current user object
-
-            if (user && elements.profileUsername) {
-                // Fetch full profile from 'profiles' table
-                const { data: profile, error } = await supabase
-                    .from('profiles')
-                    .select('username, avatar_url')
-                    .eq('id', user.id)
-                    .single();
-
-                if (error) throw error;
-
-                const username = profile?.username || user.email.split('@')[0];
-                const avatarUrl = profile?.avatar_url;
-                
-                elements.profileUsername.textContent = username;
-                elements.profileSubtext.textContent = "в сети"; // Placeholder status
-                elements.profileAvatarWrapper.innerHTML = S.ui.createAvatarHTML(username, avatarUrl, '40px') + 
-                    '<div id="profile-status" class="profile-status online"></div>';
-            }
-        } catch (error) {
-            console.error('[App] Error fetching user profile:', error);
-            if (elements.profileUsername) {
-                elements.profileUsername.textContent = "Ошибка";
-                elements.profileAvatarWrapper.innerHTML = S.ui.createAvatarHTML("Error", null, '40px');
-            }
+        const username = S.utils.escapeHtml(currentUserProfile.username || currentUserProfile.email.split('@')[0]);
+        const avatarUrl = currentUserProfile.avatar_url;
+        
+        if (elements.profileUsername) elements.profileUsername.textContent = username;
+        if (elements.profileSubtext) elements.profileSubtext.textContent = "в сети";
+        if (elements.profileAvatarWrapper) {
+            elements.profileAvatarWrapper.innerHTML = S.ui.createAvatarHTML(username, avatarUrl, '40px') + 
+                '<div id="profile-status" class="profile-status online"></div>';
         }
     }
 
@@ -122,16 +93,15 @@ S.app = (function () {
             const tabButton = e.target.closest('.tab-item');
             if (!tabButton) return;
 
-            // Update active tab style
             elements.chatTabs.querySelector('.active')?.classList.remove('active');
             tabButton.classList.add('active');
 
-            // Switch content view
             const tabName = tabButton.dataset.tab;
             const views = elements.mainContentArea.querySelectorAll('.content-view');
             views.forEach(view => view.classList.remove('visible'));
             
-            const activeView = document.getElementById(`view-${tabName.startsWith('friends') ? 'friends' : 'add-friend'}`);
+            const activeViewId = `view-${tabName.startsWith('friends') ? 'friends' : 'add-friend'}`;
+            const activeView = document.getElementById(activeViewId);
             if (activeView) {
                 activeView.classList.add('visible');
             }
@@ -148,16 +118,14 @@ S.app = (function () {
             const searchTerm = usernameInput.value.trim();
             if (!searchTerm) return;
 
-            const supabase = getClient();
+            const supabase = S.auth.getSupabaseClient();
             if (!supabase) {
                 if (S.toast) S.toast.show('Клиент не готов.', { type: 'error' });
                 return;
             }
 
-            // Here you would implement the logic to send a friend request.
-            // For now, we'll just log it.
             console.log(`[App] Sending friend request to: ${searchTerm}`);
-            if (S.toast) S.toast.show(`Запрос отправлен пользователю ${searchTerm}`, { type: 'success' });
+            if (S.toast) S.toast.show(`Запрос отправлен пользователю ${S.utils.escapeHtml(searchTerm)}`, { type: 'success' });
             
             usernameInput.value = '';
         });
@@ -172,21 +140,23 @@ S.app = (function () {
         elements.mainContentArea = document.getElementById('main-content-area');
     }
 
-    async function init() {
-        console.log('[App] Initializing application...');
+    async function init(profile) {
+        console.log('[App] Initializing application with profile...', profile);
+        currentUserProfile = profile;
+        
         queryElements();
         
-        await fetchAndRenderUserProfile(); // Fetch user profile first to get currentUser
-        await fetchAndRenderFriends();     // Now fetch friends
+        renderUserProfile();
+        await fetchAndRenderFriends();
 
         handleTabNavigation();
         handleAddFriend();
         
-        if (window.S?.ui?.hideLoading) await window.S.ui.hideLoading();
-        if (window.S?.ui?.showMainApp) window.S.ui.showMainApp();
+        if (S.ui.hideLoading) await S.ui.hideLoading();
+        if (S.ui.showMainApp) S.ui.showMainApp();
     }
 
-    return {
+    S.app = {
         init,
     };
-})();
+})(window.S);
