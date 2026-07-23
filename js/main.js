@@ -1,20 +1,11 @@
-// SENTCOR v4.1 — Main App Initializer with Safe Namespace & Async Profile
+// SENTCOR v4.2 — Отказоустойчивый главный инициализатор
 window.S = window.S || {};
-window.S.ui = window.S.ui || {};
+window.S.main = window.S.main || {};
 window.S.utils = window.S.utils || {};
-window.S.auth = window.S.auth || {};
 
 (function(S) {
     "use strict";
 
-    let currentUser = null;
-    let userProfile = null;
-
-    /**
-     * Simple HTML escaping utility.
-     * @param {string} str - The string to escape.
-     * @returns {string} The escaped string.
-     */
     S.utils.escapeHtml = function(str) {
         if (typeof str !== 'string') return '';
         return str
@@ -25,25 +16,8 @@ window.S.auth = window.S.auth || {};
             .replace(/'/g, "&#039;");
     };
 
-    /**
-     * Fetches the current user's profile data from Supabase.
-     * @returns {Promise<object|null>} The profile data or null if not found.
-     */
-    async function fetchUserProfile() {
-        const supabase = S.auth.getSupabaseClient();
-        if (!supabase) {
-            console.error("[Main] Supabase client is not available.");
-            return null;
-        }
-
+    async function fetchUserProfile(supabase, user) {
         try {
-            const { data: { user } } = await supabase.auth.getUser();
-            if (!user) {
-                console.log("[Main] No authenticated user found.");
-                return null;
-            }
-            currentUser = user;
-
             const { data: profile, error } = await supabase
                 .from('profiles')
                 .select('username, avatar_url')
@@ -52,50 +26,57 @@ window.S.auth = window.S.auth || {};
 
             if (error) throw error;
             
-            // Combine user and profile data into a single object
-            return {
-                ...user,
-                ...profile
-            };
-
+            return { ...user, ...profile };
         } catch (error) {
-            console.error("[Main] Error fetching user profile:", error);
-            return null;
+            console.error("[Main] Ошибка при загрузке профиля:", error);
+            S.toast.show('Не удалось загрузить данные профиля.', { type: 'error' });
+            return user; // Возвращаем хотя бы данные пользователя, если профиль не загрузился
         }
     }
 
-    /**
-     * Initializes the main application.
-     * Fetches user data and then kicks off the rest of the app's initialization.
-     */
     async function init() {
-        console.log("[Main] Initializing...");
+        console.log("[Main] Инициализация...");
+        S.ui.showLoading('Инициализация...');
+        
+        let userProfile = null;
 
-        userProfile = await fetchUserProfile();
+        try {
+            const supabase = S.auth.getSupabaseClient();
+            if (!supabase) throw new Error("Клиент Supabase не найден.");
 
-        console.log("[Main] Initializing main application UI with profile:", userProfile);
+            const { data: { session } } = await supabase.auth.getSession();
 
-        if (userProfile) {
-            // If profile is loaded, initialize the main app components
-            if (S.app && typeof S.app.init === 'function') {
-                S.app.init(userProfile);
+            if (session?.user) {
+                console.log("[Main] Сессия найдена. Загрузка профиля...");
+                S.ui.showLoading('Загрузка профиля...');
+                userProfile = await fetchUserProfile(supabase, session.user);
+                
+                if (userProfile) {
+                    console.log("[Main] Профиль загружен, запускаем приложение:", userProfile);
+                    await S.app.init(userProfile);
+                    S.ui.showMainApp();
+                } else {
+                    // Этого не должно произойти, но на всякий случай
+                    throw new Error("Профиль не был загружен, хотя сессия существует.");
+                }
             } else {
-                console.error("[Main] S.app.init() is not available.");
+                console.log("[Main] Сессия не найдена. Показываем экран входа.");
+                S.ui.showAuthScreen();
+                S.auth.showAuthUI(); // Убедимся, что форма входа отрендерена
             }
-        } else {
-            // If no profile, it might mean the user is not logged in.
-            // The auth module should handle redirection to the login page.
-            console.log("[Main] No user profile loaded. Auth module should take over.");
-            // Potentially hide loading screen and show auth screen
-            if (S.ui.hideLoading) S.ui.hideLoading();
-            const authScreen = document.getElementById('auth-screen');
-            if (authScreen) authScreen.classList.add('visible');
+        } catch (error) {
+            console.error("[Main] Критическая ошибка при инициализации:", error);
+            S.toast.show('Произошла критическая ошибка. Попробуйте обновить страницу.', { type: 'error', duration: 5000 });
+            // Показываем экран входа как запасной вариант
+            S.ui.showAuthScreen();
+            if (S.auth.showAuthUI) S.auth.showAuthUI();
+        } finally {
+            // Гарантированно скрываем загрузчик в любом случае
+            console.log("[Main] Инициализация завершена, скрываем загрузчик.");
+            S.ui.hideLoading();
         }
     }
 
-    // --- Public API ---
-    S.main = {
-        init
-    };
+    S.main.init = init;
 
 })(window.S);

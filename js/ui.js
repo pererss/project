@@ -1,73 +1,100 @@
-// SENTCOR v4.1 — Core UI Helpers with Safe Namespace
+// SENTCOR v4.2 — отказоустойчивый UI с таймаутом загрузки
 window.S = window.S || {};
 window.S.ui = window.S.ui || {};
-window.S.utils = window.S.utils || {};
-window.S.auth = window.S.auth || {};
 
-/**
- * Creates a robust avatar HTML, falling back to initials if the image fails.
- * @param {string} username - The user's name.
- * @param {string|null} avatarUrl - The URL for the user's avatar image.
- * @param {string} size - The size of the avatar (e.g., '36px').
- * @returns {string} The HTML string for the avatar.
- */
-S.ui.createAvatarHTML = function(username, avatarUrl, size = '36px') {
-    const name = username || 'User';
-    // Sanitize username for use in JS string
-    const sanitizedName = name.replace(/'/g, "\\'");
+(function(S) {
+    "use strict";
 
-    if (avatarUrl) {
-        // The onerror handler will replace the broken image with the fallback
-        return `<img src="${avatarUrl}" 
-                     alt="${sanitizedName}'s Avatar" 
-                     style="width:${size}; height:${size};" 
-                     class="user-avatar-image"
-                     onerror="this.outerHTML = S.ui.createAvatarHTML('${sanitizedName}', null, '${size}');">`;
-    }
-    
-    // Fallback to initials
-    const initial = name ? name[0].toUpperCase() : 'U';
-    const fontSize = `calc(${size} / 2.2)`;
-    return `<div class="user-avatar-initials" 
-                 style="width:${size}; height:${size}; font-size:${fontSize};">
-                ${initial}
-            </div>`;
-};
+    const ui = {
+        loadingTimeout: null,
+        loadingScreen: null,
+        mainAppScreen: null,
+        authScreen: null,
 
-/**
- * Generates HTML for a "no friends" empty state.
- * @returns {string} The HTML string for the empty state.
- */
-S.ui.getEmptyFriendsStateHTML = function() {
-    return `
-        <div class="empty-state">
-            <div class="empty-state-icon">
-                <i class="fa-solid fa-user-plus"></i>
-            </div>
-            <h3 class="empty-state-title">У вас пока нет друзей</h3>
-            <p class="empty-state-text">
-                Перейдите во вкладку 'Добавить в друзья', чтобы найти пользователей по логину.
-            </p>
-        </div>
-    `;
-};
+        init() {
+            this.loadingScreen = document.getElementById('loading-screen');
+            this.mainAppScreen = document.getElementById('main-app-screen');
+            this.authScreen = document.getElementById('auth-screen');
+        },
 
-/**
- * Hides the main loading screen.
- */
-S.ui.hideLoading = function() {
-    const loadingScreen = document.getElementById('loading-screen');
-    if (loadingScreen) {
-        loadingScreen.classList.remove('visible');
-    }
-};
+        showLoading(message = 'Загрузка...') {
+            if (!this.loadingScreen) this.init();
+            
+            const statusText = this.loadingScreen.querySelector('#loading-status-text');
+            if (statusText) statusText.textContent = message;
 
-/**
- * Shows the main application screen.
- */
-S.ui.showMainApp = function() {
-    const mainAppScreen = document.getElementById('main-app-screen');
-    if (mainAppScreen) {
-        mainAppScreen.classList.add('visible');
-    }
-};
+            this.loadingScreen.style.display = 'flex';
+            this.loadingScreen.offsetHeight; // Trigger reflow
+            this.loadingScreen.classList.add('visible');
+
+            // Аварийный таймаут для предотвращения бесконечной загрузки
+            if (this.loadingTimeout) clearTimeout(this.loadingTimeout);
+            this.loadingTimeout = setTimeout(() => {
+                console.warn('[UI] Сработал таймаут загрузки. Принудительно скрываем лоадер.');
+                this.hideLoading();
+            }, 4000);
+        },
+
+        hideLoading() {
+            if (this.loadingTimeout) {
+                clearTimeout(this.loadingTimeout);
+                this.loadingTimeout = null;
+            }
+            if (!this.loadingScreen) return;
+
+            this.loadingScreen.classList.remove('visible');
+            // Ждем завершения анимации, чтобы скрыть элемент
+            setTimeout(() => {
+                this.loadingScreen.style.display = 'none';
+            }, 300); // Должно совпадать с transition-duration в CSS
+        },
+
+        showMainApp() {
+            if (!this.mainAppScreen) return;
+            this.mainAppScreen.style.display = 'block';
+            this.mainAppScreen.offsetHeight;
+            this.mainAppScreen.classList.add('visible');
+        },
+
+        showAuthScreen() {
+            if (!this.authScreen) return;
+            this.authScreen.style.display = 'flex';
+            this.authScreen.offsetHeight;
+            this.authScreen.classList.add('visible');
+        },
+
+        createAvatarHTML(username, avatarUrl, size = '36px') {
+            const name = username || 'User';
+            const sanitizedName = name.replace(/'/g, "\\'");
+
+            if (avatarUrl) {
+                return `<img src="${avatarUrl}" 
+                             alt="${sanitizedName}'s Avatar" 
+                             style="width:${size}; height:${size};" 
+                             class="user-avatar-image"
+                             onerror="this.outerHTML = S.ui.createAvatarHTML('${sanitizedName}', null, '${size}');">`;
+            }
+            
+            const initial = name ? name[0].toUpperCase() : 'U';
+            const fontSize = `calc(${size} / 2.2)`;
+            return `<div class="user-avatar-initials" 
+                         style="width:${size}; height:${size}; font-size:${fontSize};">
+                        ${initial}
+                    </div>`;
+        },
+
+        getEmptyFriendsStateHTML() {
+            return `
+                <div class="empty-state">
+                    <div class="empty-state-icon"><i class="fa-solid fa-user-plus"></i></div>
+                    <h3 class="empty-state-title">У вас пока нет друзей</h3>
+                    <p class="empty-state-text">Перейдите во вкладку 'Добавить в друзья', чтобы найти пользователей.</p>
+                </div>
+            `;
+        }
+    };
+
+    S.ui = { ...S.ui, ...ui };
+    document.addEventListener('DOMContentLoaded', () => S.ui.init());
+
+})(window.S);
