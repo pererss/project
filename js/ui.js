@@ -1,8 +1,11 @@
-// SENTCOR v22.0 — Preloader & Screen Management
+// SENTCOR v23.0 — UI Refactor & Style Overhaul
 (function() {
     "use strict";
 
+    // Ensure global namespace exists
     window.S = window.SENTCOR = window.S || {};
+    window.S.ui = window.S.ui || {};
+
     const S = window.S;
 
     const elements = {};
@@ -43,20 +46,23 @@
 
     function showLoading(message = 'Загрузка...') {
         return new Promise(resolve => {
+            if (!elements.loading) init(); // Lazy init
+            
             if (elements.loadingStatusText) {
                 elements.loadingStatusText.textContent = message;
             }
-            elements.loading.classList.add('visible');
+            if(elements.loading) {
+                elements.loading.style.display = 'flex';
+                setTimeout(() => elements.loading.classList.add('visible'), 10);
+            }
 
-            // Safety timeout
             clearTimeout(loadingTimeout);
             loadingTimeout = setTimeout(() => {
                 console.warn("[UI] Loading took too long. Forcing auth screen.");
                 if (S.toast) S.toast.show("Загрузка заняла слишком много времени.", { type: 'warning' });
                 hideLoading().then(showAuth);
-            }, 5000);
+            }, 8000); // Increased timeout
 
-            // The transition takes 300ms
             setTimeout(resolve, 300);
         });
     }
@@ -66,24 +72,30 @@
             clearTimeout(loadingTimeout);
             if (elements.loading) {
                 elements.loading.classList.remove('visible');
+                setTimeout(() => {
+                    elements.loading.style.display = 'none';
+                    resolve();
+                }, 300);
+            } else {
+                resolve();
             }
-            // Wait for fade-out transition to complete
-            setTimeout(resolve, 300);
         });
     }
 
     function showErrorState(message, { isFatal = true, errorDetails = null } = {}) {
         console.error(`[UI] Displaying error state (isFatal: ${isFatal}): ${message}`, errorDetails);
+        hideLoading();
 
         if (!isFatal) {
             console.warn("A non-fatal error occurred. Redirecting to auth screen.");
+            if (S.toast) S.toast.show(message, { type: 'error' });
             showAuth();
             return;
         }
 
         const errorScreen = elements.error;
         if (!errorScreen) {
-             document.body.innerHTML = `<div style="color:white;text-align:center;padding:2rem;">Критическая ошибка: ${escapeHtml(message)}</div>`;
+             document.body.innerHTML = `<div style="color:white;text-align:center;padding:2rem;background:#0C0C0E;height:100vh;display:flex;align-items:center;justify-content:center;">Критическая ошибка: ${escapeHtml(message)}</div>`;
              return;
         }
 
@@ -113,16 +125,31 @@
 
     function getSkeletonHTML(type, count = 1) {
         let html = '';
-        const template = type === 'avatar' 
-            ? '<div class="skeleton skeleton-avatar"></div>'
-            : '<div class="skeleton skeleton-text"></div>';
+        const baseClass = 'skeleton';
+        const typeClass = type === 'friend' 
+            ? 'skeleton-friend-item'
+            : (type === 'avatar' ? 'skeleton-avatar' : 'skeleton-text');
+
         for (let i = 0; i < count; i++) {
-            html += template;
+            if (type === 'friend') {
+                html += `
+                    <div class="${baseClass} ${typeClass}">
+                        <div class="skeleton-avatar"></div>
+                        <div class="skeleton-friend-info">
+                            <div class="skeleton-text" style="width: 60%;"></div>
+                            <div class="skeleton-text" style="width: 80%;"></div>
+                        </div>
+                    </div>
+                `;
+            } else {
+                 html += `<div class="${baseClass} ${typeClass}"></div>`;
+            }
         }
         return html;
     }
 
-    S.ui = {
+    // Explicitly define the public API on the S.ui object
+    Object.assign(S.ui, {
         init,
         onReady,
         showScreen,
@@ -133,7 +160,7 @@
         showMainApp: () => showScreen('main-app'),
         escapeHtml,
         getSkeletonHTML,
-    };
+    });
     
     onReady(init);
 

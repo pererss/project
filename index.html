@@ -3,9 +3,9 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>SENTCOR — Игровой мессенджер</title>
-  <meta name="description" content="SENTCOR — игровой мессенджер с голосовыми чатами, серверами и друзьями." />
-  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🎮</text></svg>" />
+  <title>SENTCOR — Мессенджер</title>
+  <meta name="description" content="SENTCOR — мессенджер с голосовыми чатами и друзьями." />
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>💬</text></svg>" />
   
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -13,12 +13,14 @@
 
   <style>
     :root {
-      --text-primary: #e4e4e7;
-      --text-secondary: #a1a1aa;
-      --accent-color: #8a2be2; /* Blue Violet */
-      --accent-glow: 0 0 15px rgba(138, 43, 226, 0.5), 0 0 5px rgba(138, 43, 226, 0.8);
-      --bg-primary: #050508;
-      --bg-secondary: #15151a;
+      --text-primary: #FFFFFF;
+      --text-secondary: #8A8A93;
+      --accent-color: #D4A359;
+      --accent-color-hover: #C88A36;
+      --bg-primary: #0C0C0E;
+      --bg-secondary: #141417;
+      --bg-tertiary: #1A1A1E;
+      --border-color: rgba(255, 255, 255, 0.08);
     }
     
     html, body {
@@ -27,7 +29,7 @@
       height: 100%;
       width: 100%;
       font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
-      background: radial-gradient(circle, var(--bg-secondary) 0%, var(--bg-primary) 100%);
+      background: var(--bg-primary);
       color: var(--text-primary);
       overflow: hidden;
     }
@@ -37,7 +39,7 @@
     .screen {
       width: 100%;
       min-height: 100vh;
-      display: flex;
+      display: none; /* Changed from flex to none */
       justify-content: center;
       align-items: center;
       flex-direction: column;
@@ -45,225 +47,119 @@
       position: absolute;
       top: 0;
       left: 0;
-      transition: opacity 0.3s ease, visibility 0.3s ease;
+      transition: opacity 0.3s ease;
       visibility: hidden;
       opacity: 0;
     }
     .screen.visible {
+      display: flex;
       visibility: visible;
       opacity: 1;
     }
 
     /* Preloader Styles */
+    #loading-screen {
+        background-color: var(--bg-primary);
+    }
     .preloader-container {
       display: flex;
       flex-direction: column;
       align-items: center;
       gap: 24px;
     }
-    .preloader-logo {
-      font-size: 4rem;
-      font-weight: 700;
-      color: #fff;
-      text-shadow: 0 0 10px #fff, 0 0 20px #fff, 0 0 40px var(--accent-color), 0 0 60px var(--accent-color);
-      animation: pulse 2s infinite ease-in-out;
-    }
     .preloader-spinner {
-      width: 80px;
-      height: 80px;
+      width: 60px;
+      height: 60px;
       border-radius: 50%;
-      border: 3px solid rgba(255, 255, 255, 0.1);
-      border-top-color: transparent;
-      border-left-color: var(--accent-color);
-      box-shadow: 0 0 15px rgba(138, 43, 226, 0.5);
-      animation: spin 1.2s cubic-bezier(0.5, 0, 0.5, 1) infinite;
+      border: 4px solid var(--bg-secondary);
+      border-top-color: var(--accent-color);
+      animation: spin 1s linear infinite;
     }
     .preloader-text {
       color: var(--text-secondary);
       font-size: 1rem;
-      animation: flicker 1.8s infinite;
     }
 
-    @keyframes pulse {
-      0%, 100% { opacity: 0.8; transform: scale(1); }
-      50% { opacity: 1; transform: scale(1.05); }
-    }
     @keyframes spin {
       to { transform: rotate(360deg); }
     }
-    @keyframes flicker {
-      0%, 100% { opacity: 0.6; }
-      50% { opacity: 1; }
-    }
 
-    /* Auth Screen Styles (from previous step, slightly adapted) */
+    /* Auth Screen Styles */
     .auth-card {
-      background: rgba(20, 20, 25, 0.75);
-      backdrop-filter: blur(16px);
-      border: 1px solid rgba(255, 255, 255, 0.08);
-      border-radius: 16px;
+      background: var(--bg-secondary);
+      border: 1px solid var(--border-color);
+      border-radius: 12px;
       padding: 32px;
       width: 100%;
       max-width: 400px;
-      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
     }
     .auth-header { text-align: center; margin-bottom: 32px; }
-    .auth-title { font-size: 2.25rem; font-weight: 700; margin: 0; }
+    .auth-title { font-size: 2rem; font-weight: 700; margin: 0; }
     .auth-subtitle { font-size: 1rem; color: var(--text-secondary); margin-top: 8px; }
     .input-group { margin-bottom: 20px; }
     .input-group label { display: block; margin-bottom: 8px; font-size: 0.875rem; font-weight: 500; color: var(--text-secondary); }
     .input-group input {
-      width: 100%; padding: 12px; background: rgba(255, 255, 255, 0.05);
-      border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 8px;
+      width: 100%; padding: 12px; background: var(--bg-tertiary);
+      border: 1px solid var(--border-color); border-radius: 8px;
       color: var(--text-primary); font-size: 1rem; box-sizing: border-box;
-      transition: border-color 0.2s, box-shadow 0.2s;
+      transition: border-color 0.2s;
     }
-    .input-group input:focus { outline: none; border-color: rgba(138, 43, 226, 0.7); box-shadow: var(--accent-glow); }
+    .input-group input:focus { outline: none; border-color: var(--accent-color); }
     .btn {
       padding: 12px; border: none; border-radius: 8px; font-size: 1rem; font-weight: 600;
-      cursor: pointer; width: 100%; transition: transform 0.2s ease, box-shadow 0.2s ease;
+      cursor: pointer; width: 100%; transition: background-color 0.2s ease;
     }
-    .btn:hover { transform: translateY(-2px); }
-    .btn:active { transform: translateY(0); }
-    .btn-primary { background: linear-gradient(90deg, #6d28d9, #8b5cf6); color: white; box-shadow: 0 4px 15px rgba(138, 43, 226, 0.3); }
-    .btn-primary:hover { box-shadow: var(--accent-glow); }
-    .btn-secondary { background: rgba(255, 255, 255, 0.05); border: 1px solid rgba(255, 255, 255, 0.1); color: var(--text-primary); }
-    .btn-secondary:hover { background: rgba(255, 255, 255, 0.1); }
+    .btn:hover { background-color: var(--accent-color-hover); }
+    .btn-primary { background-color: var(--accent-color); color: var(--bg-primary); }
+    .btn-secondary { background: var(--bg-tertiary); border: 1px solid var(--border-color); color: var(--text-primary); }
+    .btn-secondary:hover { background: var(--bg-secondary); }
     .auth-footer { text-align: center; margin-top: 24px; font-size: 0.875rem; color: var(--text-secondary); }
-    .auth-footer a { color: #a78bfa; text-decoration: none; font-weight: 500; }
+    .auth-footer a { color: var(--accent-color); text-decoration: none; font-weight: 500; }
     .auth-footer a:hover { text-decoration: underline; }
-    .auth-error-message { color: #fca5a5; background-color: rgba(239, 68, 68, 0.1); border: 1px solid rgba(239, 68, 68, 0.3); padding: 12px; border-radius: 8px; margin-bottom: 20px; text-align: center; display: none; }
+    .auth-error-message { color: #ff9b9b; background-color: rgba(255, 100, 100, 0.1); border: 1px solid rgba(255, 100, 100, 0.2); padding: 12px; border-radius: 8px; margin-bottom: 20px; text-align: center; display: none; }
     .auth-divider { text-align: center; margin: 24px 0; color: var(--text-secondary); font-size: 0.75rem; text-transform: uppercase; display: flex; align-items: center; }
-    .auth-divider::before, .auth-divider::after { content: ''; flex: 1; border-bottom: 1px solid rgba(255, 255, 255, 0.1); }
+    .auth-divider::before, .auth-divider::after { content: ''; flex: 1; border-bottom: 1px solid var(--border-color); }
     .auth-divider span { padding: 0 16px; }
 
-    .app-layout {
-      display: flex;
-      width: 100%;
-      height: 100vh;
-    }
-    .sidebar {
-      width: 320px;
-      background-color: rgba(10, 10, 12, 0.8);
-      border-right: 1px solid rgba(255, 255, 255, 0.05);
-      display: flex;
-      flex-direction: column;
-    }
-    .sidebar-header {
-        padding: 16px;
-        border-bottom: 1px solid rgba(255, 255, 255, 0.05);
-    }
+    /* App Layout */
+    .app-layout { display: flex; width: 100%; height: 100vh; }
+    .sidebar { width: 320px; background-color: var(--bg-secondary); border-right: 1px solid var(--border-color); display: flex; flex-direction: column; }
+    .sidebar-header { padding: 16px; border-bottom: 1px solid var(--border-color); }
     .search-input {
-        width: 100%;
-        padding: 10px 16px;
-        background: rgba(255, 255, 255, 0.05);
-        border: 1px solid rgba(255, 255, 255, 0.1);
-        border-radius: 8px;
-        color: var(--text-primary);
-        font-size: 0.9rem;
-        box-sizing: border-box;
-        transition: all 0.2s ease;
+        width: 100%; padding: 10px 16px; background: var(--bg-tertiary);
+        border: 1px solid var(--border-color); border-radius: 8px;
+        color: var(--text-primary); font-size: 0.9rem; box-sizing: border-box; transition: all 0.2s ease;
     }
-    .search-input:focus {
-        outline: none;
-        border-color: rgba(138, 43, 226, 0.7);
-        box-shadow: var(--accent-glow);
-    }
-    .scrollable-list {
-        overflow-y: auto;
-        flex-grow: 1;
-    }
-    .main-content {
-      flex-grow: 1;
-      padding: 24px;
-    }
-    .friend-item {
-        display: flex;
-        align-items: center;
-        padding: 12px 16px;
-        cursor: pointer;
-        border-bottom: 1px solid rgba(255, 255, 255, 0.03);
-        transition: background-color 0.2s ease;
-    }
-    .friend-item:hover {
-        background-color: rgba(255, 255, 255, 0.04);
-    }
-    .friend-avatar {
-        position: relative;
-        margin-right: 12px;
-    }
-    .friend-avatar img {
-        width: 40px;
-        height: 40px;
-        border-radius: 50%;
-    }
-    .status-indicator {
-        position: absolute;
-        bottom: 0;
-        right: 0;
-        width: 12px;
-        height: 12px;
-        border-radius: 50%;
-        border: 2px solid var(--bg-secondary);
-    }
+    .search-input:focus { outline: none; border-color: var(--accent-color); }
+    .scrollable-list { overflow-y: auto; flex-grow: 1; }
+    .main-content { flex-grow: 1; padding: 24px; display: flex; align-items: center; justify-content: center; color: var(--text-secondary); }
+    
+    /* Friend List Item */
+    .friend-item { display: flex; align-items: center; padding: 12px 16px; cursor: pointer; border-bottom: 1px solid var(--border-color); transition: background-color 0.2s ease; }
+    .friend-item.active, .friend-item:hover { background-color: var(--bg-tertiary); }
+    .friend-item.active { border-left: 3px solid var(--accent-color); padding-left: 13px; }
+    .friend-avatar { position: relative; margin-right: 12px; }
+    .friend-avatar img { width: 40px; height: 40px; border-radius: 50%; background-color: var(--bg-tertiary); }
+    .status-indicator { position: absolute; bottom: 0; right: 0; width: 12px; height: 12px; border-radius: 50%; border: 2px solid var(--bg-secondary); }
     .status-indicator.online { background-color: #22c55e; }
     .status-indicator.offline { background-color: #71717a; }
-    .friend-info {
-        flex-grow: 1;
-    }
-    .friend-name {
-        font-weight: 600;
-        color: var(--text-primary);
-    }
-    .friend-last-message {
-        font-size: 0.875rem;
-        color: var(--text-secondary);
-        white-space: nowrap;
-        overflow: hidden;
-        text-overflow: ellipsis;
-        max-width: 150px;
-    }
-    .friend-meta {
-        text-align: right;
-        font-size: 0.75rem;
-        color: var(--text-secondary);
-    }
-    .last-message-time {
-        margin-bottom: 4px;
-    }
-    .unread-count {
-        background-color: var(--accent-color);
-        color: white;
-        font-weight: 600;
-        border-radius: 10px;
-        padding: 2px 6px;
-        font-size: 0.7rem;
-        display: inline-block;
-    }
-    .empty-list-placeholder, .error-placeholder {
-        text-align: center;
-        padding: 40px 20px;
-        color: var(--text-secondary);
-    }
+    .friend-info { flex-grow: 1; overflow: hidden; }
+    .friend-name { font-weight: 600; color: var(--text-primary); }
+    .friend-last-message { font-size: 0.875rem; color: var(--text-secondary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .friend-meta { text-align: right; font-size: 0.75rem; color: var(--text-secondary); }
+    .last-message-time { margin-bottom: 4px; }
+    .unread-count { background-color: var(--accent-color); color: var(--bg-primary); font-weight: 700; border-radius: 10px; padding: 2px 6px; font-size: 0.7rem; display: inline-block; }
+    .empty-list-placeholder, .error-placeholder { text-align: center; padding: 40px 20px; color: var(--text-secondary); }
 
     /* Skeleton Loader Styles */
-    .skeleton {
-      animation: skeleton-loading 1s linear infinite alternate;
-    }
-    .skeleton-text {
-      width: 100%;
-      height: 1em;
-      margin-bottom: .5em;
-      border-radius: .25rem;
-    }
-    .skeleton-avatar {
-      width: 40px;
-      height: 40px;
-      border-radius: 50%;
-    }
+    .skeleton { animation: skeleton-loading 1.5s linear infinite alternate; background-color: var(--bg-tertiary); }
+    .skeleton-friend-item { display: flex; align-items: center; padding: 12px 16px; }
+    .skeleton-avatar { width: 40px; height: 40px; border-radius: 50%; margin-right: 12px; }
+    .skeleton-friend-info { flex: 1; }
+    .skeleton-text { height: 1em; margin-bottom: .5em; border-radius: .25rem; }
     @keyframes skeleton-loading {
-      0% { background-color: rgba(255, 255, 255, 0.05); }
-      100% { background-color: rgba(255, 255, 255, 0.1); }
+      from { background-color: var(--bg-tertiary); }
+      to { background-color: var(--bg-secondary); }
     }
   </style>
 
@@ -274,6 +170,7 @@
   <!-- Global Namespace -->
   <script>
     window.S = window.SENTCOR = window.S || {};
+    window.S.ui = window.S.ui || {};
   </script>
 </head>
 <body>
@@ -281,9 +178,8 @@
   <div id="app">
     <div id="loading-screen" class="screen visible">
       <div class="preloader-container">
-        <div class="preloader-logo">S</div>
         <div class="preloader-spinner"></div>
-        <p id="loading-status-text" class="preloader-text">Загрузка SentCor...</p>
+        <p id="loading-status-text" class="preloader-text">Загрузка...</p>
       </div>
     </div>
     <div id="auth-screen" class="screen">
@@ -297,7 +193,21 @@
             <div id="auth-footer"></div>
         </div>
     </div>
-    <div id="main-app-screen" class="screen"></div>
+    <div id="main-app-screen" class="screen">
+      <div class="app-layout">
+        <div id="friends-list-container" class="sidebar">
+            <div class="sidebar-header">
+                <input type="text" id="friend-search-input" class="search-input" placeholder="Найти друга...">
+            </div>
+            <div id="friends-list" class="scrollable-list">
+                <!-- Friend items will be injected here by app.js -->
+            </div>
+        </div>
+        <div class="main-content">
+            <p>Выберите чат для начала общения.</p>
+        </div>
+      </div>
+    </div>
     <div id="error-screen" class="screen"></div>
   </div>
   <div id="toast-container"></div>
@@ -308,6 +218,7 @@
   <script src="js/ui.js"></script>
   <script src="js/toast.js"></script>
   <script src="js/auth.js"></script>
+  <script src="js/app.js"></script>
   <script src="js/connection.js"></script>
   
   <!-- Feature Modules -->
@@ -321,22 +232,26 @@
   <!-- Main Application Entry Point -->
   <script>
     document.addEventListener('DOMContentLoaded', async () => {
-      if (window.S?.toast?.init) window.S.toast.init();
+      // Initialize UI and Toast modules first
       if (window.S?.ui?.init) window.S.ui.init();
+      if (window.S?.toast?.init) window.S.toast.init();
       
-      await S.ui.showLoading('Инициализация...');
+      // Use optional chaining for safety
+      await window.S?.ui?.showLoading('Инициализация...');
 
       try {
         const sessionInitialized = await window.S.auth.initSession();
-        await S.ui.hideLoading();
         if (!sessionInitialized) {
           console.log("[Init] No active session. Showing auth screen.");
-          S.ui.showAuth();
+          await window.S?.ui?.hideLoading();
+          window.S?.ui?.showAuth();
         }
+        // On successful session, hideLoading is called within app.js or auth.js
       } catch (err) {
-        console.warn('[Init] Soft failure during session initialization:', err);
-        await S.ui.hideLoading();
-        S.ui.showAuth();
+        console.error('[Init] Critical failure during session initialization:', err);
+        await window.S?.ui?.hideLoading();
+        // Show a fatal error screen
+        window.S?.ui?.showErrorState('Не удалось инициализировать сессию.', { isFatal: true, errorDetails: err });
       }
     });
   </script>
