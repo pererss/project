@@ -1,120 +1,203 @@
-// SENTCOR Connection Manager v1.1
+// SENTCOR Connection Manager v3.0 - Centralized Realtime Hub
 (function() {
     "use strict";
 
-    window.SENTCOR = window.SENTCOR || {};
+    if (!window.SENTCOR) {
+        console.error("[Connection] Critical: SENTCOR base not found.");
+        return;
+    }
     const S = window.SENTCOR;
 
+    // --- Module State ---
     let heartbeatInterval = null;
-    const HEARTBEAT_INTERVAL_MS = 30000;
-    let currentRealtimeStatus = 'disconnected';
+    const HEARTBEAT_INTERVAL_MS = 30000; // 30 seconds
+    let currentStatus = 'disconnected';
     let mainChannel = null;
+    let isInitialized = false;
+    let reconnectTimer = null;
 
-    function subscribeToChannel() {
-        if (!S.sb || !S.user) return;
+    // --- Private Functions ---
+
+    /**
+     * Dispatches incoming real-time payloads to the relevant modules.
+     * @param {object} payload - The Supabase real-time payload.
+     */
+    function delegateRealtimePayload(payload) {
+        console.log('[Connection] Realtime event received:', payload);
+        const { table, eventType, new: newRecord, old: oldRecord } = payload;
+
+        if (table === 'profiles' && S.friends) {
+            S.friends.handleProfileUpdate(newRecord);
+        }
+
+        if ((table === 'direct_messages' || table === 'messages') && eventType === 'INSERT' && S.chat) {
+            S.chat.handleRealtimeMessageEvent(payload);
+        }
         
-        const channelName = `realtime:user:${S.user.id}`;
-        mainChannel = S.sb.channel(channelName, {
-            config: {
-                broadcast: {
-                    self: true,
-                },
-            },
-        });
-
-        mainChannel.on('postgres_changes', { event: '*', schema: 'public' }, payload => {
-            // This is where you'd handle incoming realtime messages
-            // For now, we just use it to monitor connection status
-            console.log('Realtime event received:', payload);
-        });
-
-        mainChannel.subscribe((status, err) => {
-            currentRealtimeStatus = status;
-            console.log(`ConnectionManager: Realtime subscription status is [${status}]`);
-
-            if (status === 'SUBSCRIBED') {
-                S.toast.show("Соединение установлено", "success", 3000);
-                startHeartbeat();
-            } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
-                console.error(`ConnectionManager: Subscription failed with status [${status}]`, err);
-                S.toast.show("Ошибка подключения к Realtime", "error", 5000);
-                stopHeartbeat();
-            } else if (status === 'CLOSED') {
-                console.warn("ConnectionManager: Realtime channel closed.");
-                stopHeartbeat();
-            }
-        });
+        if (table === 'voice_participants' && S.voice) {
+            S.voice.handleParticipantUpdate(payload);
+        }
     }
 
-    function checkConnection() {
-        console.log(`ConnectionManager: Heartbeat - Current status is [${currentRealtimeStatus}]`);
+    /**
+     * Subscribes to the main user channel for global events.
+     */
+    function subscribeToChannel() {
+        if (!S.sb || !S.user) {
+            console.error("[Connection] Cannot subscribe: Supabase client or user is missing.");
+            return;
+        }
 
-        if (currentRealtimeStatus !== 'SUBSCRIBED') {
-            console.warn(`ConnectionManager: Realtime not subscribed. Attempting to re-subscribe...`);
-            S.toast.show("Восстанавливаем соединение...", "warning", 2000);
-            if (mainChannel) {
-                mainChannel.subscribe(); // Attempt to re-subscribe
-            } else {
-                subscribeToChannel(); // Or create a new subscription
-            }
+        if (mainChannel) {
+            S.sb.removeChannel(mainChannel);
+            mainChannel = null;
+        }
+
+        try {
+            // This channel is for global notifications like profile updates
+            const channelName = `global-feed`;
+            mainChannel = S.sb.channel(channelName, {
+                config: { broadcast: { self: false } } // Don't receive our own broadcasts
+            });
+
+            mainChannel
+                .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'profiles' }, delegateRealtimePayload)
+                .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages' }, delegateRealtimePayload)
+                .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'direct_messages' }, delegateRealtimePayload)
+                .on('postgres_changes', { event: '*', schema: 'public', table: 'voice_participants' }, delegateRealtimePayload)
+                .subscribe((status, err) => {
+                    currentStatus = status;
+                    console.log(`[Connection] Realtime status: ${status}`);
+
+                    switch (status) {
+                        case 'SUBSCRIBED':
+                            S.toast.show("Realtime-соединение установлено", "success", 2000);
+                            startHeartbeat();
+                            if(reconnectTimer) clearTimeout(reconnectTimer);
+                            break;
+                        case 'CHANNEL_ERROR':
+                        case 'TIMED_OUT':
+                            console.error(`[Connection] Subscription failed:`, err);
+                            S.toast.show(`Ошибка Realtime: ${err.message}`, "error", 5000);
+                            scheduleReconnect();
+                            break;
+                        case 'CLOSED':
+                            console.warn("[Connection] Realtime channel closed unexpectedly.");
+                            scheduleReconnect();
+                            break;
+                    }
+                });
+        } catch (e) {
+            console.error("[Connection] Critical error during channel subscription:", e);
+            S.toast.show("Критическая ошибка Realtime-подключения", "error");
+            currentStatus = 'failed';
+        }
+    }
+    
+    /**
+     * Schedules a reconnection attempt with a backoff strategy.
+     */
+    function scheduleReconnect() {
+        stopHeartbeat();
+        if (reconnectTimer) clearTimeout(reconnectTimer);
+        
+        if (navigator.onLine) {
+            console.log("[Connection] Scheduling reconnect in 5 seconds...");
+            S.toast.show("Соединение потеряно. Попытка восстановления...", "warning", 4000);
+            reconnectTimer = setTimeout(checkConnection, 5000);
+        }
+    }
+
+    /**
+     * Checks the connection status and attempts to re-subscribe if necessary.
+     */
+    function checkConnection() {
+        if (currentStatus !== 'SUBSCRIBED' && navigator.onLine) {
+            console.warn(`[Connection] Status is '${currentStatus}'. Attempting to re-subscribe...`);
+            subscribeToChannel();
         }
     }
 
     function startHeartbeat() {
-        if (heartbeatInterval) clearInterval(heartbeatInterval);
-        console.log(`ConnectionManager: Starting heartbeat every ${HEARTBEAT_INTERVAL_MS / 1000} seconds.`);
+        stopHeartbeat();
+        console.log(`[Connection] Starting heartbeat check every ${HEARTBEAT_INTERVAL_MS}ms.`);
         heartbeatInterval = setInterval(checkConnection, HEARTBEAT_INTERVAL_MS);
     }
 
     function stopHeartbeat() {
         if (heartbeatInterval) {
-            console.log("ConnectionManager: Stopping heartbeat.");
             clearInterval(heartbeatInterval);
             heartbeatInterval = null;
+            console.log("[Connection] Heartbeat stopped.");
         }
     }
 
+    // --- Event Handlers ---
     function handleVisibilityChange() {
         if (document.visibilityState === 'visible') {
-            console.log("ConnectionManager: Tab is visible again. Checking connection.");
-            // Don't call auth logic, just check the connection status.
-            setTimeout(checkConnection, 1000);
-        } else {
-            console.log("ConnectionManager: Tab is hidden. Heartbeat will continue but checks will be less frequent if browser throttles timers.");
+            console.log("[Connection] Tab is visible. Checking connection.");
+            setTimeout(checkConnection, 1000); // Delay to allow network to settle
         }
     }
 
     function handleOnlineStatus() {
         if (navigator.onLine) {
-            console.log("ConnectionManager: Browser is back online. Checking connection.");
-            S.toast.show("Соединение с интернетом восстановлено", "success", 3000);
-            setTimeout(checkConnection, 1000);
+            console.log("[Connection] Browser is online. Re-checking connection.");
+            S.toast.show("Сеть восстановлена", "success");
+            setTimeout(checkConnection, 2000);
         } else {
-            console.error("ConnectionManager: Browser is offline. Realtime connection will be lost.");
+            console.error("[Connection] Browser is offline.");
             S.toast.show("Отсутствует подключение к сети", "error", 10000);
-            currentRealtimeStatus = 'disconnected'; // Manually set status
+            currentStatus = 'disconnected';
             stopHeartbeat();
         }
     }
 
+    // --- Public API ---
     function init() {
-        console.log("ConnectionManager: Initializing...");
+        if (isInitialized) {
+            console.warn("[Connection] Already initialized. Ignoring call.");
+            return;
+        }
+        if (!S.user || !S.sb) {
+            console.error("[Connection] Cannot initialize without a user and Supabase client.");
+            return;
+        }
+
+        console.log("[Connection] Initializing Realtime Hub...");
+        subscribeToChannel();
+
+        document.addEventListener('visibilitychange', handleVisibilityChange);
+        window.addEventListener('online', handleOnlineStatus);
+        window.addEventListener('offline', handleOnlineStatus);
         
-        // Wait for user to be available
-        const waitForUser = setInterval(() => {
-            if (S.user) {
-                clearInterval(waitForUser);
-                subscribeToChannel();
-                document.addEventListener('visibilitychange', handleVisibilityChange);
-                window.addEventListener('online', handleOnlineStatus);
-                window.addEventListener('offline', handleOnlineStatus);
-                console.log("ConnectionManager: Initialized for user.");
-            }
-        }, 100);
+        isInitialized = true;
+    }
+
+    function disconnect() {
+        if (!isInitialized) return;
+        
+        console.log("[Connection] Disconnecting Realtime Hub...");
+        stopHeartbeat();
+        if (reconnectTimer) clearTimeout(reconnectTimer);
+        
+        if (mainChannel) {
+            S.sb.removeChannel(mainChannel).catch(err => console.error("[Connection] Error removing channel on disconnect:", err));
+            mainChannel = null;
+        }
+
+        document.removeEventListener('visibilitychange', handleVisibilityChange);
+        window.removeEventListener('online', handleOnlineStatus);
+        window.removeEventListener('offline', handleOnlineStatus);
+
+        isInitialized = false;
+        currentStatus = 'disconnected';
+        console.log("[Connection] Disconnected.");
     }
 
     S.connection = {
-        init
+        init,
+        disconnect
     };
 
 })();

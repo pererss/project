@@ -1,51 +1,88 @@
-// SENTCOR v6.1 — Stable Auth & Profile Management
+// SENTCOR v7.0 — Centralized Auth State Management
 (function() {
     "use strict";
 
-    const C = window.SENTCOR_CONFIG;
+    window.SENTCOR = window.SENTCOR || {};
     const S = window.SENTCOR;
-    const sb = S.sb;
+    const sb = S.sb; // Assuming S.sb is initialized by supabase.js
 
+    // --- Module State ---
     S.user = null;
     S.profile = null;
     S.session = null;
     S.appLoaded = false;
     let sessionLoginRecorded = false;
 
-    async function initSession() {
+    // --- Private Functions ---
+
+    /**
+     * Fetches the user's profile. Creates a default one if it doesn't exist.
+     * On critical failure, it triggers the UI error state.
+     */
+    async function fetchProfile(user) {
+        if (!user) return null;
         try {
-            const { data } = await sb.auth.getSession();
-            if (data.session) {
-                S.session = data.session;
-                S.user = data.session.user;
-                await fetchProfile();
-                return true;
+            const { data, error } = await sb.from("profiles").select("*").eq("id", user.id).maybeSingle();
+            if (error) throw error;
+
+            if (data) {
+                return data;
+            } else {
+                // Profile is missing, create a new one
+                console.warn(`[Auth] Profile missing for ${user.id}. Creating one.`);
+                const username = user.user_metadata?.username || ("user_" + user.id.slice(0, 8));
+                const { data: newProfile, error: insertError } = await sb.from("profiles")
+                    .insert({ id: user.id, username, display_name: username })
+                    .select()
+                    .single();
+                if (insertError) throw insertError;
+                return newProfile;
             }
-            return false;
         } catch (e) {
-            console.error("initSession failed:", e);
-            S.ui.showErrorState("Не удалось проверить сессию. Попробуйте перезагрузить страницу.");
-            return false;
+            console.error("[Auth] Critical error fetching profile:", e);
+            S.ui.showErrorState(`Не удалось загрузить ваш профиль: ${e.message}`);
+            return null;
         }
     }
 
-    async function fetchProfile() {
-        if (!S.user) return;
+    /**
+     * A non-critical function to record a user's daily login.
+     * Silently fails without blocking the UI.
+     */
+    async function recordLogin(user) {
+        if (!user || sessionLoginRecorded) return;
         try {
-            const { data, error } = await sb.from("profiles").select("*").eq("id", S.user.id).maybeSingle();
-            if (error) throw error;
-            if (data) {
-                S.profile = data;
+            const { error } = await sb.from("daily_logins").upsert({
+                user_id: user.id,
+                login_date: new Date().toISOString().slice(0, 10)
+            }, { onConflict: 'user_id,login_date' });
+
+            if (error) {
+                // This is a non-critical, often expected error (e.g., RLS)
+                console.warn("[Auth] Failed to record daily login:", error.message);
             } else {
-                console.warn("Profile missing, creating for", S.user.id);
-                const username = S.user.user_metadata?.username || ("user_" + S.user.id.slice(0, 8));
-                const { data: newP, error: insErr } = await sb.from("profiles").insert({ id: S.user.id, username, display_name: username }).select().maybeSingle();
-                if (insErr) throw insErr;
-                S.profile = newP;
+                sessionLoginRecorded = true; // Mark as recorded for this session
             }
         } catch (e) {
-            console.error("fetchProfile failed:", e.message);
-            S.ui.showErrorState(`Не удалось загрузить профиль: ${e.message}`);
+            console.error("[Auth] Unexpected error in recordLogin:", e);
+        }
+    }
+
+    // --- Public API Functions ---
+
+    /**
+     * Checks for an existing session on app startup.
+     * Returns true if a session exists, false otherwise.
+     * Does not trigger UI changes, as onAuthStateChange is the source of truth.
+     */
+    async function initSession() {
+        try {
+            const { data } = await sb.auth.getSession();
+            return !!data.session;
+        } catch (e) {
+            console.error("[Auth] Failed to check initial session:", e);
+            S.ui.showErrorState("Не удалось проверить сессию. Попробуйте перезагрузить страницу.");
+            return false;
         }
     }
 
@@ -53,11 +90,11 @@
         try {
             const { data, error } = await sb.auth.signInWithPassword({ email, password });
             if (error) throw error;
-            // onAuthStateChange will handle the rest
+            // onAuthStateChange will handle the UI transition
             return { data };
         } catch (e) {
-            console.error("signIn failed:", e.message);
-            return { error: e.message };
+            console.error("[Auth] signIn failed:", e);
+            return { error: e.message || "Произошла неизвестная ошибка." };
         }
     }
 
@@ -71,90 +108,91 @@
             if (error) throw error;
             return { data };
         } catch (e) {
-            console.error("signUp failed:", e.message);
-            return { error: e.message };
+            console.error("[Auth] signUp failed:", e);
+            return { error: e.message || "Произошла неизвестная ошибка." };
         }
     }
 
     async function signOut() {
-        await setOnlineStatus("offline");
         const { error } = await sb.auth.signOut();
         if (error) {
-            console.error("signOut failed:", error.message);
+            console.error("[Auth] signOut failed:", error);
             S.ui.safeToast("Ошибка при выходе.", "error");
         }
-        sessionLoginRecorded = false; // Reset for next login
-    }
-
-    async function recordLogin() {
-        if (!S.user || sessionLoginRecorded) return;
-        try {
-            const { error } = await sb.from("daily_logins").upsert({
-                user_id: S.user.id,
-                login_date: new Date().toISOString().slice(0, 10)
-            }, { onConflict: 'user_id,login_date' });
-
-            if (error) {
-                // This is a non-critical error, just log it.
-                // The 403 error is likely due to RLS policies.
-                console.warn("Failed to record daily login (RLS issue?):", error.message);
-            } else {
-                sessionLoginRecorded = true; // Mark as recorded for this session
-            }
-        } catch (e) {
-            // Catch any other unexpected errors silently.
-            console.error("Unexpected error in recordLogin:", e);
-        }
+        // onAuthStateChange will handle the UI transition
     }
 
     async function setOnlineStatus(status) {
-        if (!S.user || !S.profile) return;
+        if (!S.user) return;
         try {
-            const { error } = await sb.from("profiles").update({ status, last_login: new Date().toISOString() }).eq("id", S.user.id);
-            if (error) throw error;
-            S.profile.status = status;
-            if (S.ui && typeof S.ui.updateFooter === 'function') {
-                S.ui.updateFooter();
-            }
+            await sb.from("profiles").update({ status, last_login: new Date().toISOString() }).eq("id", S.user.id);
+            if (S.profile) S.profile.status = status;
         } catch (e) {
-            console.error("Failed to set online status:", e);
+            // Non-critical, just log it
+            console.warn("[Auth] Failed to set online status:", e.message);
         }
     }
 
+    // --- Auth State Change Handler (Single Source of Truth) ---
     sb.auth.onAuthStateChange(async (event, session) => {
-        console.log('onAuthStateChange:', event);
-        if (event === "SIGNED_IN" && session) {
-            S.user = session.user;
-            S.session = session;
-            await fetchProfile();
-            await recordLogin(); // Record login once per sign-in event
+        console.log(`[Auth] onAuthStateChange event: ${event}`);
 
-            if (!S.appLoaded) {
-                S.appLoaded = true;
-                S.ui.showApp();
-                await setOnlineStatus("online");
+        // User has successfully logged in or session was restored
+        if (event === "SIGNED_IN" || event === "INITIAL_SESSION") {
+            if (session) {
+                S.session = session;
+                S.user = session.user;
+                S.profile = await fetchProfile(session.user);
+
+                if (S.profile) {
+                    await recordLogin(session.user);
+                    await setOnlineStatus("online");
+                    
+                    // Only show app if not already loaded
+                    if (!S.appLoaded) {
+                        S.appLoaded = true;
+                        S.ui.showApp();
+                    }
+                } else {
+                    // If profile fetch failed, showErrorState was already called
+                    await signOut(); // Log the user out to be safe
+                }
             }
-        } else if (event === "SIGNED_OUT") {
+        } 
+        // User has logged out
+        else if (event === "SIGNED_OUT") {
+            if (S.appLoaded) { // Only update status if the app was actually running
+               await setOnlineStatus("offline");
+               if (S.connection && typeof S.connection.disconnect === 'function') {
+                    S.connection.disconnect();
+               }
+            }
             S.user = null;
             S.profile = null;
             S.session = null;
             S.appLoaded = false;
             sessionLoginRecorded = false;
             S.ui.showAuth();
-        } else if (event === "TOKEN_REFRESHED" && session) {
-            S.session = session;
-            S.user = session.user;
+        } 
+        // Session token has been refreshed
+        else if (event === "TOKEN_REFRESHED") {
+            if (session) {
+                S.session = session;
+                S.user = session.user;
+            } else {
+                // If token refresh fails, it often means the session is invalid.
+                await signOut();
+            }
         }
     });
 
+    // --- Expose Public API ---
     S.auth = {
         initSession,
-        fetchProfile,
         signIn,
         signUp,
         signOut,
         setOnlineStatus,
-        recordLogin
     };
 
 })();

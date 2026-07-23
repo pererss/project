@@ -23,16 +23,16 @@
   <!-- Core Modules -->
   <script src="js/config.js"></script>
   <script src="js/supabase.js"></script>
-  <script src="js/connection.js"></script>
   <script src="js/toast.js"></script>
-  <script src="js/ui.js"></script>
   <script src="js/auth.js"></script>
+  <script src="js/ui.js"></script>
+  <script src="js/connection.js"></script>
   
   <!-- Feature Modules -->
-  <script src="js/servers.js"></script>
   <script src="js/chat.js"></script>
   <script src="js/friends.js"></script>
   <script src="js/profile.js"></script>
+  <script src="js/servers.js"></script>
   <script src="js/voice.js"></script>
 
   <script>
@@ -47,9 +47,11 @@
       try {
         // Phase 2: Session & Connection
         const sessionInitialized = await window.SENTCOR.auth.initSession();
-        window.SENTCOR.connection.init(); // Start connection manager AFTER session is known
-
+        
         if (sessionInitialized) {
+          // Start connection manager ONLY if a session exists
+          window.SENTCOR.connection.init(); 
+
           // Phase 3: Full App Load
           window.SENTCOR.appLoaded = true;
           await window.SENTCOR.auth.setOnlineStatus("online");
