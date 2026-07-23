@@ -22,7 +22,7 @@ window.S.app = window.S.app || {};
 
   async function buildConvs(){
     var u=window.S.auth.getUser();var frs=window.S.friends.getFriends();
-    if(!u||!frs.length){convs=[]return;}
+    if(!u||!frs.length){convs=[];return;}
     try{var c=window.S.supabase;if(!c)return;
     var ids=frs.map(function(f){return f.id;});var parts=[];
     ids.forEach(function(f){parts.push('and(sender_id.eq.'+u.id+',receiver_id.eq.'+f+')');parts.push('and(sender_id.eq.'+f+',receiver_id.eq.'+u.id+')');});

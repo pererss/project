@@ -8,12 +8,12 @@ window.S.friends = window.S.friends || {};
 
   async function fetchFriends(){
     var u=window.S.auth.getUser();if(!u)return[];
-    try{var c=gS();if(!c)return[];var r=await c.from('friend_requests').select('id,from_user,to_user,status,created_at').or('from_user.eq.'+u.id+',to_user.eq.'+u.id).eq('status','accepted');if(r.error)throw r.error;var reqs=r.data||[];var ids=[];reqs.forEach(function(x){var f=x.from_user===u.id?x.to_user:x.from_user;if(ids.indexOf(f)===-1)ids.push(f);});if(!ids.length){friends=[]return friends;}var p=await c.from('profiles').select(PF).in('id',ids);if(p.error)throw p.error;friends=p.data||[];return friends;}catch(e){friends=[];return friends;}
+    try{var c=gS();if(!c)return[];var r=await c.from('friend_requests').select('id,from_user,to_user,status,created_at').or('from_user.eq.'+u.id+',to_user.eq.'+u.id).eq('status','accepted');if(r.error)throw r.error;var reqs=r.data||[];var ids=[];reqs.forEach(function(x){var f=x.from_user===u.id?x.to_user:x.from_user;if(ids.indexOf(f)===-1)ids.push(f);});if(!ids.length){friends=[];return friends;}var p=await c.from('profiles').select(PF).in('id',ids);if(p.error)throw p.error;friends=p.data||[];return friends;}catch(e){friends=[];return friends;}
   }
 
   async function fetchPending(){
     var u=window.S.auth.getUser();if(!u)return[];
-    try{var c=gS();if(!c)return[];var r=await c.from('friend_requests').select('id,from_user,to_user,status,created_at').eq('to_user',u.id).eq('status','pending');if(r.error)throw r.error;var reqs=r.data||[];var sids=reqs.map(function(x){return x.from_user;});if(!sids.length){pending=[]return pending;}var p=await c.from('profiles').select(PF).in('id',sids);if(p.error)throw p.error;var pm={};(p.data||[]).forEach(function(x){pm[x.id]=x;});pending=reqs.map(function(x){return{id:x.id,from_user:x.from_user,to_user:x.to_user,status:x.status,created_at:x.created_at,profile:pm[x.from_user]||null};});return pending;}catch(e){pending=[]return pending;}
+    try{var c=gS();if(!c)return[];var r=await c.from('friend_requests').select('id,from_user,to_user,status,created_at').eq('to_user',u.id).eq('status','pending');if(r.error)throw r.error;var reqs=r.data||[];var sids=reqs.map(function(x){return x.from_user;});if(!sids.length){pending=[];return pending;}var p=await c.from('profiles').select(PF).in('id',sids);if(p.error)throw p.error;var pm={};(p.data||[]).forEach(function(x){pm[x.id]=x;});pending=reqs.map(function(x){return{id:x.id,from_user:x.from_user,to_user:x.to_user,status:x.status,created_at:x.created_at,profile:pm[x.from_user]||null};});return pending;}catch(e){pending=[];return pending;}
   }
 
   async function searchUsers(q){
