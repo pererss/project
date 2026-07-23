@@ -1,104 +1,76 @@
-// SENTCOR v4.3 — Безопасный вызов toast
-(function(window) {
+// ===============================================================
+// SentCor Toast Module v5.0 - Defensive & Robust
+// ===============================================================
+
+// Правило №1: Гарантия глобального пространства имен
+window.S = window.S || {};
+window.S.ui = window.S.ui || {};
+window.S.utils = window.S.utils || {};
+window.S.auth = window.S.auth || {};
+window.S.app = window.S.app || {};
+
+(function(S) {
     "use strict";
 
-    window.S = window.S || {};
-
     const toast = {
-        init: function() {
-            if (document.getElementById("toast-container")) return;
-            const container = document.createElement("div");
-            container.id = "toast-container";
-            document.body.appendChild(container);
-            console.log("[Toast] Модуль инициализирован.");
+        container: null,
+
+        /**
+         * Инициализирует контейнер для уведомлений.
+         */
+        init() {
+            if (this.container) return;
+            this.container = document.getElementById('toast-container');
+            if (!this.container) {
+                console.warn('[Toast] #toast-container not found. Creating one.');
+                this.container = document.createElement('div');
+                this.container.id = 'toast-container';
+                document.body.appendChild(this.container);
+            }
         },
 
-        show: function(message, options = {}) {
+        /**
+         * Показывает уведомление.
+         * @param {string} message - Сообщение для отображения.
+         * @param {object} [options={}] - Опции.
+         * @param {string} [options.type='info'] - Тип ('info', 'success', 'error').
+         * @param {number} [options.duration=3000] - Длительность в мс.
+         */
+        show(message, options = {}) {
+            this.init();
+            
             const { type = 'info', duration = 3000 } = options;
-            
-            // Безопасная функция-обертка для escapeHtml
-            const safeEscape = window.S?.ui?.escapeHtml || window.S?.utils?.escapeHtml || ((s) => s || '');
-            
-            this.showCustom({
-                content: safeEscape(message),
-                type: type,
-                duration: duration,
-                position: 'top-center'
-            });
-        },
 
-        showCustom: function(options) {
-            const {
-                content,
-                type = 'info',
-                duration = 3000,
-                position = 'top-center',
-                onClick = null
-            } = options;
-
-            const container = document.getElementById("toast-container");
-            if (!container) {
-                console.error("[Toast] Контейнер не найден. Вызов init() был пропущен?");
-                // Попробуем инициализировать и повторить
-                this.init();
-                setTimeout(() => this.showCustom(options), 50);
-                return;
-            }
+            // Правило №4: Безопасный фоллбэк для escapeHtml
+            const safeEscape = S.utils.escapeHtml || S.ui.escapeHtml || ((s) => s || '');
             
-            let positionContainer = document.getElementById(`toast-container-${position}`);
-            if (!positionContainer) {
-                positionContainer = document.createElement("div");
-                positionContainer.id = `toast-container-${position}`;
-                positionContainer.className = `toast-position-container ${position}`;
-                container.appendChild(positionContainer);
-            }
+            const toastElement = document.createElement('div');
+            toastElement.className = `toast toast-${type}`;
+            toastElement.innerHTML = safeEscape(message);
 
-            const toastElement = document.createElement("div");
-            toastElement.className = `toast ${type}`;
-            toastElement.innerHTML = content;
+            this.container.appendChild(toastElement);
 
-            if (onClick && typeof onClick === 'function') {
-                toastElement.classList.add('clickable');
-                toastElement.addEventListener('click', (e) => {
-                    e.stopPropagation();
-                    onClick();
-                    this.remove(toastElement);
-                });
-            }
-            
-            positionContainer.prepend(toastElement);
-
-            if (duration > 0) {
-                const timer = setTimeout(() => {
-                    this.remove(toastElement);
-                }, duration);
-                toastElement.dataset.timer = timer;
-            }
-            
-            return toastElement;
-        },
-
-        remove: function(toastElement) {
-            if (!toastElement || !toastElement.parentNode) return;
-            
-            clearTimeout(toastElement.dataset.timer);
-            toastElement.classList.add("removing");
-            
-            const onAnimationEnd = () => {
-                toastElement.removeEventListener('animationend', onAnimationEnd);
-                if (toastElement.parentNode) {
+            // Таймер на удаление
+            setTimeout(() => {
+                toastElement.classList.add('fade-out');
+                // Удаляем элемент из DOM после завершения анимации
+                toastElement.addEventListener('animationend', () => {
                     toastElement.remove();
-                    const parent = toastElement.parentNode;
-                    if (parent && parent.classList.contains('toast-position-container') && parent.children.length === 0) {
-                        parent.remove();
-                    }
-                }
-            };
-            toastElement.addEventListener('animationend', onAnimationEnd);
+                });
+            }, duration);
         }
     };
 
+    // Экспорт публичных методов
     S.toast = toast;
-    document.addEventListener('DOMContentLoaded', () => S.toast.init());
 
-})(window);
+    // Ранняя инициализация
+    document.addEventListener('DOMContentLoaded', () => {
+        try {
+            S.toast.init();
+        } catch (error) {
+            console.error('[Toast] Failed to initialize on DOMContentLoaded:', error);
+        }
+    });
+
+})(window.S);
