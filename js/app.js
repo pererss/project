@@ -110,12 +110,22 @@ S.app = (function () {
     function handleFriendSearch() {
         if (!elements.friendSearchInput) return;
 
+        const debouncedSearch = debounce(searchUsers, 300);
+
         elements.friendSearchInput.addEventListener('input', (e) => {
             const searchTerm = e.target.value.toLowerCase();
-            const filteredFriends = friendsCache.filter(friend =>
-                (friend.user_name || '').toLowerCase().includes(searchTerm)
-            );
-            renderFriendsList(filteredFriends);
+            if (searchTerm) {
+                // Hide friends list and show search results
+                elements.friendsListContainer.classList.add('hidden');
+                debouncedSearch(searchTerm);
+            } else {
+                // Show friends list and hide search results
+                elements.friendsListContainer.classList.remove('hidden');
+                if (elements.userSearchResults) {
+                    elements.userSearchResults.classList.remove('visible');
+                }
+                renderFriendsList(friendsCache); // Re-render original list
+            }
         });
     }
 
