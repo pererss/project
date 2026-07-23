@@ -1,167 +1,66 @@
-// SENTCOR v23.0 — UI Refactor & Style Overhaul
-(function() {
-    "use strict";
+// SENTCOR v4.0 — Core UI Helpers
+window.S = window.S || {};
 
-    // Ensure global namespace exists
-    window.S = window.SENTCOR = window.S || {};
-    window.S.ui = window.S.ui || {};
+S.ui = (function () {
 
-    const S = window.S;
+    /**
+     * Creates a robust avatar HTML, falling back to initials if the image fails.
+     * @param {string} username - The user's name.
+     * @param {string|null} avatarUrl - The URL for the user's avatar image.
+     * @param {string} size - The size of the avatar (e.g., '36px').
+     * @returns {string} The HTML string for the avatar.
+     */
+    function createAvatarHTML(username, avatarUrl, size = '36px') {
+        const name = username || 'User';
+        // Sanitize username for use in JS string
+        const sanitizedName = name.replace(/'/g, "\\'");
 
-    const elements = {};
-    const screenIds = ['loading', 'error', 'auth', 'main-app'];
-    let loadingTimeout = null;
-
-    function onReady(fn) {
-        if (document.readyState !== 'loading') {
-            fn();
-        } else {
-            document.addEventListener('DOMContentLoaded', fn);
-        }
-    }
-
-    function init() {
-        screenIds.forEach(id => {
-            elements[id] = document.getElementById(`${id}-screen`);
-        });
-        elements.loadingStatusText = document.getElementById('loading-status-text');
-        console.log("[UI] Engine Initialized.");
-    }
-
-    function showScreen(screenToShow) {
-        if (!elements[screenToShow]) {
-            console.error(`[UI] Cannot show screen: "${screenToShow}" is not valid.`);
-            return showErrorState(`Попытка показать несуществующий экран: "${screenToShow}"`);
+        if (avatarUrl) {
+            // The onerror handler will replace the broken image with the fallback
+            return `<img src="${avatarUrl}" 
+                         alt="${sanitizedName}'s Avatar" 
+                         style="width:${size}; height:${size};" 
+                         class="user-avatar-image"
+                         onerror="this.outerHTML = S.ui.createAvatarHTML('${sanitizedName}', null, '${size}');">`;
         }
         
-        screenIds.forEach(id => {
-            if (elements[id]) {
-                elements[id].classList.remove('visible');
-            }
-        });
-        
-        elements[screenToShow].classList.add('visible');
-        console.log(`[UI] Activating screen: ${screenToShow}`);
+        // Fallback to initials
+        const initial = name ? name[0].toUpperCase() : 'U';
+        const fontSize = `calc(${size} / 2.2)`;
+        return `<div class="user-avatar-initials" 
+                     style="width:${size}; height:${size}; font-size:${fontSize};">
+                    ${initial}
+                </div>`;
     }
 
-    function showLoading(message = 'Загрузка...') {
-        return new Promise(resolve => {
-            if (!elements.loading) init(); // Lazy init
-            
-            if (elements.loadingStatusText) {
-                elements.loadingStatusText.textContent = message;
-            }
-            if(elements.loading) {
-                elements.loading.style.display = 'flex';
-                setTimeout(() => elements.loading.classList.add('visible'), 10);
-            }
-
-            clearTimeout(loadingTimeout);
-            loadingTimeout = setTimeout(() => {
-                console.warn("[UI] Loading took too long. Forcing auth screen.");
-                if (S.toast) S.toast.show("Загрузка заняла слишком много времени.", { type: 'warning' });
-                hideLoading().then(showAuth);
-            }, 8000); // Increased timeout
-
-            setTimeout(resolve, 300);
-        });
+    /**
+     * Generates HTML for a "no friends" empty state.
+     * @returns {string} The HTML string for the empty state.
+     */
+    function getEmptyFriendsStateHTML() {
+        return `
+            <div class="empty-state">
+                <div class="empty-state-icon">
+                    <i class="fa-solid fa-user-plus"></i>
+                </div>
+                <h3 class="empty-state-title">У вас пока нет друзей</h3>
+                <p class="empty-state-text">
+                    Перейдите во вкладку 'Добавить в друзья', чтобы найти пользователей по логину.
+                </p>
+            </div>
+        `;
     }
 
-    function hideLoading() {
-        return new Promise(resolve => {
-            clearTimeout(loadingTimeout);
-            if (elements.loading) {
-                elements.loading.classList.remove('visible');
-                setTimeout(() => {
-                    elements.loading.style.display = 'none';
-                    resolve();
-                }, 300);
-            } else {
-                resolve();
-            }
-        });
-    }
+    // Expose functions to be callable from onerror attribute
+    // This is a simplified approach. A more robust solution would use event delegation.
+    window.S.ui.createAvatarHTML = createAvatarHTML;
 
-    function showErrorState(message, { isFatal = true, errorDetails = null } = {}) {
-        console.error(`[UI] Displaying error state (isFatal: ${isFatal}): ${message}`, errorDetails);
-        hideLoading();
+    // Keep other UI functions from previous versions if they exist
+    const existingUi = window.S.ui;
 
-        if (!isFatal) {
-            console.warn("A non-fatal error occurred. Redirecting to auth screen.");
-            if (S.toast) S.toast.show(message, { type: 'error' });
-            showAuth();
-            return;
-        }
-
-        const errorScreen = elements.error;
-        if (!errorScreen) {
-             document.body.innerHTML = `<div style="color:white;text-align:center;padding:2rem;background:#0C0C0E;height:100vh;display:flex;align-items:center;justify-content:center;">Критическая ошибка: ${escapeHtml(message)}</div>`;
-             return;
-        }
-
-        errorScreen.innerHTML = `
-            <div class="auth-card">
-                <h1 class="auth-title">Критическая ошибка</h1>
-                <p style="color: var(--text-secondary); margin-top: 8px;">${escapeHtml(message)}</p>
-                <br/>
-                <button class="btn btn-primary" onclick="window.location.reload()">Перезагрузить</button>
-            </div>`;
-        showScreen('error');
-    }
-    
-    function showAuth() {
-        showScreen('auth');
-        if (S.auth && typeof S.auth.showAuthUI === 'function') {
-            S.auth.showAuthUI();
-        } else {
-            console.warn("[UI] S.auth.showAuthUI() not available to render form details.");
-        }
-    }
-
-    function escapeHtml(str) {
-        if (typeof str !== 'string') return '';
-        return str.replace(/[&<>\"']/g, m => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '\"': '&quot;', "'": '&#39;' }[m]));
-    }
-
-    function getSkeletonHTML(type, count = 1) {
-        let html = '';
-        const baseClass = 'skeleton';
-        const typeClass = type === 'friend' 
-            ? 'skeleton-friend-item'
-            : (type === 'avatar' ? 'skeleton-avatar' : 'skeleton-text');
-
-        for (let i = 0; i < count; i++) {
-            if (type === 'friend') {
-                html += `
-                    <div class="${baseClass} ${typeClass}">
-                        <div class="skeleton-avatar"></div>
-                        <div class="skeleton-friend-info">
-                            <div class="skeleton-text" style="width: 60%;"></div>
-                            <div class="skeleton-text" style="width: 80%;"></div>
-                        </div>
-                    </div>
-                `;
-            } else {
-                 html += `<div class="${baseClass} ${typeClass}"></div>`;
-            }
-        }
-        return html;
-    }
-
-    // Explicitly define the public API on the S.ui object
-    Object.assign(S.ui, {
-        init,
-        onReady,
-        showScreen,
-        showLoading,
-        hideLoading,
-        showErrorState,
-        showAuth,
-        showMainApp: () => showScreen('main-app'),
-        escapeHtml,
-        getSkeletonHTML,
-    });
-    
-    onReady(init);
-
+    return {
+        ...existingUi,
+        createAvatarHTML,
+        getEmptyFriendsStateHTML,
+    };
 })();

@@ -1,11 +1,6 @@
-// SENTCOR v3.0 — Robust Client Access & Resilient UI
+// SENTCOR v4.0 — Real Data, Avatar Fallbacks & Active Tabs
 window.S = window.S || {};
 
-/**
- * Universal and safe function to get the Supabase client.
- * Checks multiple global locations to ensure the client is found if it exists.
- * @returns {object|null} The Supabase client instance or null.
- */
 function getClient() {
     return window.supabaseClient || 
            (window.S?.auth?.getSupabaseClient && window.S.auth.getSupabaseClient()) || 
@@ -15,26 +10,25 @@ function getClient() {
 
 S.app = (function () {
     let friendsCache = [];
+    let currentUser = null;
 
     const elements = {
         friendsList: null,
-        friendSearchInput: null,
-        friendsListContainer: null,
         profileUsername: null,
         profileSubtext: null,
-        profileAvatarImg: null,
-        userSearchResults: null,
+        profileAvatarWrapper: null,
+        chatTabs: null,
+        mainContentArea: null,
     };
 
     function getFriendHTML(friend) {
-        const username = friend.username || friend.user_name || 'Безымянный';
+        const username = friend.username || 'Безымянный';
         const status = friend.is_online ? 'online' : 'offline';
-        const avatarUrl = friend.avatar_url || 'assets/default-avatar.png';
-
+        
         return `
             <div class="list-item" data-id="${friend.id}">
                 <div class="list-item-avatar">
-                    <img src="${avatarUrl}" alt="${username}'s Avatar">
+                    ${S.ui.createAvatarHTML(username, friend.avatar_url, '36px')}
                     <div class="list-item-status ${status}"></div>
                 </div>
                 <div class="list-item-info">
@@ -48,7 +42,7 @@ S.app = (function () {
         if (!elements.friendsList) return;
 
         if (!friends || friends.length === 0) {
-            elements.friendsList.innerHTML = `<div class="empty-list-placeholder">Список пока пуст</div>`;
+            elements.friendsList.innerHTML = S.ui.getEmptyFriendsStateHTML();
             return;
         }
         elements.friendsList.innerHTML = friends.map(getFriendHTML).join('');
@@ -57,32 +51,32 @@ S.app = (function () {
     async function fetchAndRenderFriends() {
         if (!elements.friendsList) return;
 
-        elements.friendsList.innerHTML = S.ui.getSkeletonHTML('friend', 5);
+        // elements.friendsList.innerHTML = S.ui.getSkeletonHTML('friend', 5); // Assumes getSkeletonHTML exists
 
         const supabase = getClient();
-        if (!supabase) {
-            console.warn('[App] Supabase client is not ready yet, skipping fetch.');
+        if (!supabase || !currentUser) {
+            console.warn('[App] Supabase client or user not ready, skipping friends fetch.');
             elements.friendsList.innerHTML = '<div class="error-placeholder">Не удалось подключиться.</div>';
             return;
         }
 
         try {
-            // Mock data for demonstration purposes
-            const mockFriends = [
-                { id: 1, user_name: 'Екатерина', is_online: true, avatar_url: null },
-                { id: 2, user_name: 'Дмитрий', is_online: false, avatar_url: null },
-                { id: 3, user_name: 'Алиса', is_online: true, avatar_url: null },
-            ];
-            
-            await new Promise(resolve => setTimeout(resolve, 700)); // Simulate network delay
+            // This is a placeholder query. A real app would have a 'friends' table.
+            // For now, we'll fetch all profiles except our own to simulate a user list.
+            const { data, error } = await supabase
+                .from('profiles')
+                .select('id, username, avatar_url, is_online')
+                .neq('id', currentUser.id); // Don't show self in friends list
 
-            friendsCache = mockFriends;
+            if (error) throw error;
+
+            friendsCache = data;
             renderFriendsList(friendsCache);
 
         } catch (error) {
             console.error('[App] Error fetching friends:', error);
             elements.friendsList.innerHTML = '<div class="error-placeholder">Не удалось подгрузить друзей.</div>';
-            S.toast.show('Ошибка при загрузке списка друзей.', { type: 'error' });
+            if (S.toast) S.toast.show('Ошибка при загрузке списка друзей.', { type: 'error' });
         }
     }
     
@@ -92,81 +86,101 @@ S.app = (function () {
             if (!supabase) return;
 
             const { data: { user } } = await supabase.auth.getUser();
+            currentUser = user; // Cache the current user object
 
             if (user && elements.profileUsername) {
-                const username = user.user_metadata?.user_name || user.email.split('@')[0];
-                const avatarUrl = user.user_metadata?.avatar_url || 'assets/default-avatar.png';
+                // Fetch full profile from 'profiles' table
+                const { data: profile, error } = await supabase
+                    .from('profiles')
+                    .select('username, avatar_url')
+                    .eq('id', user.id)
+                    .single();
+
+                if (error) throw error;
+
+                const username = profile?.username || user.email.split('@')[0];
+                const avatarUrl = profile?.avatar_url;
                 
                 elements.profileUsername.textContent = username;
-                elements.profileSubtext.textContent = "в сети";
-                elements.profileAvatarImg.src = avatarUrl;
+                elements.profileSubtext.textContent = "в сети"; // Placeholder status
+                elements.profileAvatarWrapper.innerHTML = S.ui.createAvatarHTML(username, avatarUrl, '40px') + 
+                    '<div id="profile-status" class="profile-status online"></div>';
             }
         } catch (error) {
             console.error('[App] Error fetching user profile:', error);
             if (elements.profileUsername) {
                 elements.profileUsername.textContent = "Ошибка";
+                elements.profileAvatarWrapper.innerHTML = S.ui.createAvatarHTML("Error", null, '40px');
             }
         }
     }
 
-    function debounce(func, delay) {
-        let timeout;
-        return function(...args) {
-            clearTimeout(timeout);
-            timeout = setTimeout(() => func.apply(this, args), delay);
-        };
-    }
+    function handleTabNavigation() {
+        if (!elements.chatTabs) return;
 
-    async function searchUsers(searchTerm) {
-        // This function remains for future implementation
-        console.log(`Searching for: ${searchTerm}`);
-    }
+        elements.chatTabs.addEventListener('click', (e) => {
+            const tabButton = e.target.closest('.tab-item');
+            if (!tabButton) return;
 
-    function handleFriendSearch() {
-        if (!elements.friendSearchInput) return;
+            // Update active tab style
+            elements.chatTabs.querySelector('.active')?.classList.remove('active');
+            tabButton.classList.add('active');
 
-        const debouncedSearch = debounce(searchUsers, 300);
-
-        elements.friendSearchInput.addEventListener('input', (e) => {
-            const searchTerm = e.target.value.toLowerCase().trim();
-            if (searchTerm) {
-                elements.friendsListContainer.classList.add('hidden');
-                if (elements.userSearchResults) {
-                    elements.userSearchResults.classList.add('visible');
-                }
-                debouncedSearch(searchTerm);
-            } else {
-                elements.friendsListContainer.classList.remove('hidden');
-                if (elements.userSearchResults) {
-                    elements.userSearchResults.classList.remove('visible');
-                }
-                renderFriendsList(friendsCache);
+            // Switch content view
+            const tabName = tabButton.dataset.tab;
+            const views = elements.mainContentArea.querySelectorAll('.content-view');
+            views.forEach(view => view.classList.remove('visible'));
+            
+            const activeView = document.getElementById(`view-${tabName.startsWith('friends') ? 'friends' : 'add-friend'}`);
+            if (activeView) {
+                activeView.classList.add('visible');
             }
+        });
+    }
+
+    function handleAddFriend() {
+        const form = document.getElementById('add-friend-form');
+        if (!form) return;
+
+        form.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const usernameInput = document.getElementById('add-friend-username');
+            const searchTerm = usernameInput.value.trim();
+            if (!searchTerm) return;
+
+            const supabase = getClient();
+            if (!supabase) {
+                if (S.toast) S.toast.show('Клиент не готов.', { type: 'error' });
+                return;
+            }
+
+            // Here you would implement the logic to send a friend request.
+            // For now, we'll just log it.
+            console.log(`[App] Sending friend request to: ${searchTerm}`);
+            if (S.toast) S.toast.show(`Запрос отправлен пользователю ${searchTerm}`, { type: 'success' });
+            
+            usernameInput.value = '';
         });
     }
 
     function queryElements() {
         elements.friendsList = document.getElementById('friends-list');
-        elements.friendSearchInput = document.getElementById('friend-search-input');
-        elements.friendsListContainer = document.getElementById('friends-list-container');
         elements.profileUsername = document.getElementById('profile-username');
         elements.profileSubtext = document.getElementById('profile-subtext');
-        elements.profileAvatarImg = document.getElementById('profile-avatar-img');
-        elements.userSearchResults = document.getElementById('user-search-results');
+        elements.profileAvatarWrapper = document.getElementById('profile-avatar-wrapper');
+        elements.chatTabs = document.getElementById('chat-tabs');
+        elements.mainContentArea = document.getElementById('main-content-area');
     }
 
     async function init() {
         console.log('[App] Initializing application...');
-        if (window.S?.ui?.showLoading) await window.S.ui.showLoading('Загрузка приложения...');
-        
         queryElements();
         
-        await Promise.all([
-            fetchAndRenderFriends(),
-            fetchAndRenderUserProfile()
-        ]);
+        await fetchAndRenderUserProfile(); // Fetch user profile first to get currentUser
+        await fetchAndRenderFriends();     // Now fetch friends
 
-        handleFriendSearch();
+        handleTabNavigation();
+        handleAddFriend();
         
         if (window.S?.ui?.hideLoading) await window.S.ui.hideLoading();
         if (window.S?.ui?.showMainApp) window.S.ui.showMainApp();

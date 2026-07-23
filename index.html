@@ -21,7 +21,6 @@
   <!-- Global Namespace -->
   <script>
     window.S = window.SENTCOR = window.S || {};
-    window.S.ui = window.S.ui || {};
   </script>
 </head>
 <body>
@@ -44,7 +43,6 @@
             </div>
             <div id="auth-error-message" class="auth-error-message"></div>
             <form id="auth-form"></form>
-            <div id="auth-footer"></div>
         </div>
     </div>
 
@@ -52,40 +50,33 @@
     <div id="main-app-screen" class="screen">
       <div class="app-layout">
         
-        <!-- 1. Servers Navigation Sidebar (Far Left) -->
+        <!-- 1. Servers Navigation Sidebar -->
         <nav class="servers-nav">
             <div class="server-item active" data-server-id="home">
                 <i class="fa-solid fa-comments server-item-icon"></i>
             </div>
             <div class="nav-separator"></div>
-            <div class="server-item" data-server-id="123">
-                <img src="https://picsum.photos/id/10/48/48" alt="Server 1">
-            </div>
-            <div class="server-item" data-server-id="456">
-                <img src="https://picsum.photos/id/25/48/48" alt="Server 2">
-            </div>
             <div class="server-item server-item-add">
                 <i class="fa-solid fa-plus server-item-icon"></i>
             </div>
         </nav>
 
-        <!-- 2. Main Sidebar (Friends/Channels) -->
+        <!-- 2. Main Sidebar -->
         <aside class="sidebar">
             <header class="sidebar-header">
-                <input type="text" id="friend-search-input" class="search-input" placeholder="Найти или начать разговор">
+                <input type="text" id="global-search-input" class="search-input" placeholder="Найти или начать разговор">
             </header>
             
             <div class="sidebar-content" id="friends-list-container">
                 <h2 class="sidebar-section-title">Личные сообщения</h2>
                 <div id="friends-list">
-                    <!-- Friend items will be injected here by app.js -->
+                    <!-- Friends list or empty state will be injected here -->
                 </div>
             </div>
 
             <footer class="profile-panel">
-                <div class="profile-avatar">
-                    <img id="profile-avatar-img" src="assets/default-avatar.png" alt="User Avatar">
-                    <div id="profile-status" class="profile-status online"></div>
+                <div id="profile-avatar-wrapper" class="profile-avatar-wrapper">
+                    <!-- Avatar will be injected here -->
                 </div>
                 <div class="profile-info">
                     <div id="profile-username" class="profile-name">Загрузка...</div>
@@ -105,73 +96,67 @@
                     <i class="fa-solid fa-at chat-title-icon"></i>
                     <span class="chat-title-text">Друзья</span>
                 </div>
-                <nav class="chat-tabs">
-                    <div class="tab-item active">В сети</div>
-                    <div class="tab-item">Все</div>
-                    <div class="tab-item">В ожидании</div>
-                    <div class="tab-item primary">Добавить в друзья</div>
+                <nav id="chat-tabs" class="chat-tabs">
+                    <button class="tab-item active" data-tab="friends-online">В сети</button>
+                    <button class="tab-item" data-tab="friends-all">Все</button>
+                    <button class="tab-item" data-tab="friends-pending">В ожидании</button>
+                    <button class="tab-item primary" data-tab="add-friend">Добавить в друзья</button>
                 </nav>
             </header>
 
-            <div class="chat-content">
-                <div class="chat-welcome">
-                    <div class="welcome-icon">👋</div>
-                    <h2 class="welcome-title">Выберите друга</h2>
-                    <p>Выберите друга из списка, чтобы начать общение.</p>
+            <div id="main-content-area" class="chat-content">
+                <!-- Content views will be injected and toggled here -->
+                <div id="view-friends" class="content-view visible">
+                    <div class="chat-welcome">
+                        <div class="welcome-icon">👋</div>
+                        <h2 class="welcome-title">Выберите друга</h2>
+                        <p>Выберите друга из списка, чтобы начать общение.</p>
+                    </div>
                 </div>
-                <!-- Messages will be rendered here -->
+
+                <div id="view-add-friend" class="content-view add-friend-view">
+                    <h3>Добавить друга</h3>
+                    <p>Вы можете добавить друга по его уникальному имени пользователя.</p>
+                    <form id="add-friend-form" class="add-friend-form">
+                        <input type="text" id="add-friend-username" class="search-input" placeholder="Имя пользователя" required>
+                        <button type="submit" class="btn-primary">Отправить запрос</button>
+                    </form>
+                    <div id="add-friend-results"></div>
+                </div>
             </div>
 
             <form class="chat-input-form">
                 <div class="chat-input-wrapper">
                     <button type="button" class="btn-icon" aria-label="Attach file"><i class="fa-solid fa-paperclip"></i></button>
-                    <input type="text" class="chat-input" placeholder="Написать сообщение...">
-                    <button type="submit" class="btn-icon" aria-label="Send message"><i class="fa-solid fa-paper-plane"></i></button>
+                    <input type="text" class="chat-input" placeholder="Написать сообщение..." disabled>
+                    <button type="submit" class="btn-icon" aria-label="Send message" disabled><i class="fa-solid fa-paper-plane"></i></button>
                 </div>
             </form>
         </main>
 
       </div>
     </div>
-
-    <!-- Other Screens -->
-    <div id="error-screen" class="screen"></div>
   </div>
   
   <div id="toast-container"></div>
 
-  <!-- Core Module Loading Order -->
+  <!-- Module Loading Order -->
   <script src="js/config.js"></script>
   <script src="js/supabase.js"></script>
   <script src="js/ui.js"></script>
   <script src="js/toast.js"></script>
   <script src="js/auth.js"></script>
   <script src="js/app.js"></script>
-  <script src="js/connection.js"></script>
-  
-  <!-- Feature Modules -->
-  <script src="js/servers.js"></script>
-  <script src="js/friends.js"></script>
-  <script src="js/profile.js"></script>
-  <script src="js/chat.js"></script>
-  <script src="js/voice.js"></script>
   <script src="js/main.js"></script>
 
-  <!-- Main Application Entry Point -->
+  <!-- Main Entry Point -->
   <script>
     document.addEventListener('DOMContentLoaded', async () => {
-      if (window.S?.ui?.init) window.S.ui.init();
-      if (window.S?.toast?.init) window.S.toast.init();
-      
-      try {
-        // Auth module now handles its own loading indicators
-        await window.S.auth.initSession();
-      } catch (err) {
-        console.error('[Init] Critical failure during session initialization:', err);
-        if (window.S?.ui?.hideLoading) await window.S.ui.hideLoading();
-        if (window.S?.ui?.showErrorState) {
-            window.S.ui.showErrorState('Критический сбой при инициализации.', { isFatal: true, errorDetails: err });
-        }
+      if (window.S?.main?.init) {
+        window.S.main.init();
+      } else {
+        console.error("Fatal: S.main.init() not found.");
+        document.body.innerHTML = '<div style="color:red; text-align:center; padding-top: 50px;">Критическая ошибка: Не удалось запустить приложение.</div>';
       }
     });
   </script>
