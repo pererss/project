@@ -78,8 +78,8 @@
         }
       } catch (error) {
         // Phase 4: Critical Failure Handling
-        console.error("CRITICAL INITIALIZATION FAILURE:", error);
-        S.ui.showErrorState("Критическая ошибка. Не удалось запустить приложение. Попробуйте обновить страницу.");
+        console.error("CRITICAL INITIALIZATION FAILURE: ", error);
+        S.ui.showErrorState("Критическая ошибка. Не удалось запустить приложение. Попробуйте обновить страницу.", error);
       }
 
       // Unload handler
