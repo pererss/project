@@ -1,4 +1,4 @@
-// SENTCOR v20.1 — Self-Healing Screen Manager (Stable)
+// SENTCOR v21.0 — Soft Error Handling UI
 (function() {
     "use strict";
 
@@ -16,10 +16,6 @@
         }
     }
 
-    /**
-     * Initializes the UI by caching or creating DOM elements.
-     * This function is resilient and will create screen containers if they are missing.
-     */
     function init() {
         const appContainer = document.getElementById('app');
         if (!appContainer) {
@@ -37,7 +33,7 @@
                 el = document.createElement('div');
                 el.id = screenId;
                 el.className = 'screen';
-                el.style.display = 'none'; // Hide by default
+                el.style.display = 'none';
                 appContainer.appendChild(el);
             }
             
@@ -47,13 +43,11 @@
         console.log("[UI] Engine Initialized. All screen elements are guaranteed to exist.");
     }
 
-    /**
-     * The definitive screen management function.
-     * Its only job is to manage screen visibility.
-     */
     function showScreen(screenToShow) {
         if (!elements[screenToShow]) {
             console.error(`[UI] Cannot show screen: "${screenToShow}" is not a valid screen key.`);
+            // As a fallback, try to show the error screen with a message
+            showErrorState(`Attempted to show a non-existent screen: "${screenToShow}"`, { isFatal: true });
             return;
         }
 
@@ -63,42 +57,55 @@
             const el = elements[id];
             if (id === screenToShow) {
                 el.style.display = 'flex';
-                el.style.visibility = 'visible';
-                el.style.opacity = '1';
-                el.style.zIndex = '1000';
-                el.style.pointerEvents = 'auto';
             } else {
                 el.style.display = 'none';
-                el.style.visibility = 'hidden';
-                el.style.opacity = '0';
-                el.style.zIndex = '-1';
-                el.style.pointerEvents = 'none';
             }
         });
     }
 
-    function showErrorState(message, errorDetails = '') {
+    /**
+     * Displays an error state.
+     * @param {string} message - The user-facing error message.
+     * @param {object} [options] - Optional parameters.
+     * @param {boolean} [options.isFatal=true] - If false, shows auth screen instead of a hard error.
+     * @param {Error} [options.errorDetails] - The actual error object for logging.
+     */
+    function showErrorState(message, { isFatal = true, errorDetails = null } = {}) {
+        console.error(`[UI] Displaying error state (isFatal: ${isFatal}): ${message}`, errorDetails);
+
+        if (!isFatal) {
+            // For non-fatal errors (like session check failures),
+            // we just log it and show the login screen.
+            console.warn("A non-fatal error occurred. Redirecting to auth screen.");
+            showAuth();
+            return;
+        }
+
         const errorScreen = elements.error;
+        if (!errorScreen) {
+             document.body.innerHTML = `<div class="auth-container">...</div>`; // Fallback
+             return;
+        }
+
         const errorHtml = `
             <div class="auth-container">
                 <div class="auth-card">
                     <h1 class="auth-title">Критическая ошибка</h1>
-                    <p style="color: #a1a1aa; margin-top: 8px;">${S.ui.escapeHtml(message)}</p>
+                    <p style="color: #a1a1aa; margin-top: 8px;">${escapeHtml(message)}</p>
                     <br/>
                     <button class="btn btn-primary" onclick="window.location.reload()">Перезагрузить</button>
                 </div>
             </div>`;
         errorScreen.innerHTML = errorHtml;
-        console.error(`[UI] Displaying error state: ${message}`, errorDetails);
         showScreen('error');
     }
     
-    // This function just switches to the auth screen.
-    // The content of the form is managed by auth.js.
     function showAuth() {
         showScreen('auth');
         if (S.auth && typeof S.auth.showAuthUI === 'function') {
             S.auth.showAuthUI();
+        } else {
+            console.warn("[UI] S.auth.showAuthUI() not available to render form details.");
         }
     }
 
@@ -118,5 +125,8 @@
         showApp: () => showScreen('main-app'),
         escapeHtml,
     };
+    
+    // Auto-init
+    onReady(init);
 
 })();
