@@ -114,6 +114,7 @@ window.S.app = window.S.app || {};
       var newServer=r.data;
       if(newServer){
         try{await c.from('server_members').insert([{server_id:newServer.id,user_id:u.id,role:'owner'}]);}catch(e){console.warn('[SentCor] insert member:',e);}
+        try{await c.from('server_channels').insert([{server_id:newServer.id,name:'общее',type:'text'}]);}catch(e){console.warn('[SentCor] insert channel:',e);}
         try{await fetchAndRenderServers();}catch(e){console.warn('[SentCor] fetchAndRenderServers:',e);}
       }
       return{success:true};

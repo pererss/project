@@ -1,73 +1,90 @@
-Ты — Senior Fullstack Developer. Срочно исправить 4 критических бага UI и логики в C:\Users\petr2\Desktop\project!
+Ты — Lead UI/UX Developer. Срочно перепиши проект C:\Users\petr2\Desktop\project!
+Убери весь оранжевый цвет, сделай строгий монохромный тёмный дизайн и исправь критические баги верстки.
 
 ===============================================================
-1. ФИКС ШИРИНЫ СООБЩЕНИЙ СОБЕСЕДНИКА (КРИТИЧЕСКИЙ БАГ)
+1. ЦВЕТОВАЯ ПАЛИТРА: СТРОГИЙ ЧЁРНО-БЕЛЫЙ МОНОХРОМ (ZERO ORANGE)
 ===============================================================
-ПРОБЛЕМА: Сообщения собеседника (слева) сжимаются в узкий вертикальный столбик по 2-3 буквы на строку.
-РЕШЕНИЕ В style.css:
-Убери у `.message-item.received`, `.message-content` и `.message-bubble` любые ограничения `max-width: 120px` или `width: min-content`.
-Задай жестко:
-.message-item.received .message-content,
-.message-item.received .message-bubble {
+- ПОЛНОСТЬЮ УДАЛИ оранжевый цвет (#FF5500) отовсюду!
+- Основной фон приложения: #0E0F12
+- Боковые панели и сайдбары: #14161D
+- Карточки и модальные окна: #1B1D26
+- Границы (borders): 1px solid #282A36
+- Активные кнопки и выделения: Чистый белый (#FFFFFF) или светлый графит (#2B2D3A) с белым текстом.
+- Ваши сообщения: Тёмно-серый баббл #272A36, цвет текста #FFFFFF.
+- Сообщения собеседника: Графитовый баббл #1E202A, цвет текста #E4E4E7.
+
+===============================================================
+2. ФИКС ШИРИНЫ И ФОРМАТА СООБЩЕНИЙ (БАГ СО СКРИНШОТА)
+===============================================================
+ПРОБЛЕМА: Сообщения собеседника сжимаются в вертикальный столбик по 2 буквы, а ваши сообщения превращаются в огромные бруски.
+
+В style.css ЖЁСТКО ЗАДАЙ:
+.message-item {
+  display: flex !important;
+  flex-direction: column !important;
+  margin-bottom: 12px !important;
+  width: 100% !important;
+}
+.message-item.sent {
+  align-items: flex-end !important;
+}
+.message-item.received {
+  align-items: flex-start !important;
+}
+.message-bubble {
   width: fit-content !important;
-  max-width: 70% !important;
-  min-width: 80px !important;
-  display: block !important;
+  max-width: 65% !important;
+  min-width: 60px !important;
+  padding: 10px 14px !important;
+  border-radius: 12px !important;
+  font-size: 14px !important;
+  line-height: 1.45 !important;
   word-break: break-word !important;
   white-space: pre-wrap !important;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.2) !important;
 }
 
 ===============================================================
-2. РАСШИРЕНИЕ НИЖНЕЙ ПАНЕЛИ ПОЛЬЗОВАТЕЛЯ (USER BAR)
+3. НИЖНЯЯ ПАНЕЛЬ ПОЛЬЗОВАТЕЛЯ (СМЕЩЕНИЕ СТРОГО ВЛЕВО)
 ===============================================================
-ПРОБЛЕМА: Панель пользователя находится только внутри саб-панели.
-РЕШЕНИЕ:
-- Нижняя плашка пользователя (`.user-bar` / `#user-profile-bar`) должна занимать ВСЮ ШИРИНУ ЛЕВОГО УГЛА (Левый рельс 72px + Саб-панель 260px = 332px).
-- В style.css сделай ее:
-  position: absolute;
-  bottom: 0;
-  left: 0;
-  width: 332px; /* На всю ширину двух левых колонок */
-  height: 60px;
-  z-index: 100;
-  background: #111217;
-  border-top: 1px solid rgba(255, 255, 255, 0.08);
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 0 12px;
-- Клик на эту плашку (кроме иконок) открывает редактирование профиля.
+ПРОБЛЕМА: Панель пользователя смещена вправо и не закрывает левый угол.
+
+В style.css ДЛЯ .user-profile-bar / #user-bar:
+position: absolute !important;
+bottom: 0 !important;
+left: 0 !important; /* СМЕЩЕНИЕ В САМЫЙ ЛЕВЫЙ УГОЛ */
+width: 312px !important; /* Ширина левой панели 72px + саб-панели 240px */
+height: 62px !important;
+background: #101117 !important;
+border-top: 1px solid #262835 !important;
+border-right: 1px solid #262835 !important;
+display: flex !important;
+align-items: center !important;
+justify-content: space-between !important;
+padding: 0 12px !important;
+z-index: 999 !important;
+
+Клик по плашке (кроме иконок шестеренки и выхода) открывает редактирование профиля.
 
 ===============================================================
-3. ПОЛНОЕ УДАЛЕНИЕ ЭМОДЗИ И ЗАМЕНА НА SVG ИКОНКИ
+4. СОВРЕМЕННЫЕ SVG ИКОНКИ (БЕЗ ЭМОДЗИ И ГОРЯЩИХ КРУГОВ)
 ===============================================================
-- ПОЛНОСТЬЮ УДАЛИ кнопку с эмодзи-смайликом (😊) из строки ввода сообщений!
-- УДАЛИ любые выпадающие эмодзи-панели и реакторы.
-- ВСЕ иконки в интерфейсе (настройки, выход, поиск, отправка, серверы, друзья, чаты) замени ИСКЛЮЧИТЕЛЬНО на чистые минималистичные SVG-векторы (Lucide стиль). Никаких эмодзи-символов в HTML и JS!
+- Замени все старые иконки и эмодзи на строгие минималистичные SVG-векторы в стиле Lucide (stroke: #9CA3AF, hover: #FFFFFF).
+- Логотип вверху слева: Минималистичный квадрат/куб со скругленными углами из белых линий.
+- Иконки меню: Чаты (💬 SVG), Друзья (👥 SVG), Серверы (🛡️ SVG), Создать (+ SVG).
 
 ===============================================================
-4. РЕМОНТ СОЗДАНИЯ И ОТОБРАЖЕНИЯ СЕРВЕРОВ
+5. РЕМОНТ СОЗДАНИЯ И ОТОБРАЖЕНИЯ СЕРВЕРОВ
 ===============================================================
 В js/app.js и js/ui.js:
-1. В модальном окне "Создать сервер" оставь ТОЛЬКО одно поле: "Название сервера".
-2. В обработчике формы создания сервера ОБЯЗАТЕЛЬНО добавь `e.preventDefault()`.
-3. Код создания сервера:
-   async function createServer(name) {
-     const { data: server, error } = await supabase
-       .from('servers')
-       .insert([{ name: name, owner_id: currentUserId }])
-       .select()
-       .single();
-     if (error) { console.error('Server create err:', error); return; }
-     
-     // Авто-добавление владельца в участники
-     await supabase.from('server_members').insert([{ server_id: server.id, user_id: currentUserId, role: 'owner' }]);
-     
-     // Перерисовать сервера
-     await fetchAndRenderServers();
-     closeModal();
-   }
-4. Функция `fetchAndRenderServers()` должна загружать сервера из таблицы `servers` и сразу отрисовывать их иконками под кнопкой "+".
+1. При нажатии на "+" открывается модалка "Создание сервера" с 1 полем: "Название сервера".
+2. В функции `createServer`:
+   - Обязательно вызови `e.preventDefault()`.
+   - Создай запись в `servers` (name, owner_id).
+   - Создай запись в `server_members` (server_id, user_id, role='owner').
+   - Создай базовый канал в `server_channels` (server_id, name='общее').
+   - Автоматически вызови перерисовку списка серверов `renderServers()`.
+3. Отобрази серверы аккуратными круглыми иконками в левом сайдбаре под кнопкой "+".
 
 ПЕРЕЗАПИШИ ВСЕ 8 ФАЙЛОВ В C:\Users\petr2\Desktop\project:
 1. index.html
