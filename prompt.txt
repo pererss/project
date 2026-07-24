@@ -1,37 +1,15 @@
-Срочный фикс ошибки 400 Bad Request при upsert profiles и insert messages!
+Преврати дизайн проекта "SentCor" в стильный, монолитный Dark Luxury UI (стеклянные панели, микро-интерактивность, неоновые акценты).
 
-ПРОБЛЕМА:
-Ты передаешь в supabase.from('profiles').upsert() или в messages лишние/несуществующие поля или полный объект user из auth, из-за чего Supabase REST API выдает 400 (Bad Request).
+ТРЕБОВАНИЯ К ДИЗАЙНУ В style.css И index.html:
+1. ТИПОГРАФИКА: Подключи шрифт 'Plus Jakarta Sans' через Google Fonts в index.html и задай его для всего body.
+2. ПАНЕЛИ И САЙДБАРЫ:
+   - Примени эффект Glassmorphism (background: rgba(20, 21, 28, 0.7), backdrop-filter: blur(16px), border: 1px solid rgba(255, 255, 255, 0.08)).
+   - Добавь скругления 16px для всех карточек и контекстных меню.
+3. СООБЩЕНИЯ (ЧАТ):
+   - Мои сообщения: оранжевый градиент linear-gradient(135deg, #FF5500, #CC4400) с мягкой тенью и плавным появлением (fadeIn).
+   - Сообщения собеседника: глубокий серый баббл rgba(255, 255, 255, 0.06) с аккуратными границами.
+4. КНОПКИ И ХОВЕРЫ:
+   - Все кнопки при наведении должны плавно приподниматься (transform: translateY(-2px)) и получать мягкое свечение.
+   - Узкий кастомный скроллбар (5px).
 
-ЖЁСТКОЕ ТРЕБОВАНИЕ К КОДУ ВО ВСЕХ ФАЙЛАХ (auth.js, ui.js, chat.js, app.js):
-
-1. ПРИ СОХРАНЕНИИ ПРОФИЛЯ (profiles.upsert):
-ВСЕГДА создавай строго очищенный объект ТОЛЬКО из 5 полей. Категорически ЗАПРЕЩЕНО передавать весь объект `user`!
-
-Напиши ровно так:
-const cleanProfileData = {
-  id: userId,
-  username: usernameValue || 'User',
-  avatar_url: avatarUrlValue || null,
-  bio: bioValue || '',
-  status: 'online'
-};
-const { error } = await supabase.from('profiles').upsert(cleanProfileData, { onConflict: 'id' });
-
-2. ПРИ ОТПРАВКЕ СООБЩЕНИЯ (messages.insert):
-Передавай ТОЛЬКО эти 3 поля:
-const cleanMessageData = {
-  sender_id: currentUserId,
-  receiver_id: targetUserId,
-  content: messageText.trim()
-};
-const { error } = await supabase.from('messages').insert([cleanMessageData]);
-
-3. ОБЕРНИ КАЖДЫЙ ВЫЗОВ В try...catch:
-Если вызов возвращает error, выводи console.warn(error), но НЕ ОСТАНАВЛИВАЙ выполнение скриптов и отрисовку UI!
-
-Исправь и перепиши файлы:
-- js/auth.js
-- js/ui.js
-- js/chat.js
-- js/app.js
+Перезапиши и обнови файлы style.css и index.html!

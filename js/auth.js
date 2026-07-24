@@ -27,20 +27,21 @@ window.S._pendingAvatar = null;
         r=await c.auth.signUp({email:e,password:p});
         if(r.data&&r.data.user&&!r.error){
           try{
-            await c.from('profiles').upsert({
+            var cleanProfile = {
               id: r.data.user.id,
-              username: u,
+              username: u || 'User',
               avatar_url: null,
-              bio: '',
+              bio: 'Всем привет!',
               status: 'online'
-            }, { onConflict: 'id' });
+            };
+            await c.from('profiles').upsert(cleanProfile, { onConflict: 'id' });
           }catch(upsertErr){console.warn('[SentCor] profiles upsert:',upsertErr);}
         }
       }
       if(r.error)throw r.error;
       user=r.data.user;
       try{await fetchP();}catch(e){console.warn('[SentCor] fetchProfile:',e);}
-      try{await c.from('profiles').upsert({id:user.id,status:'online'},{onConflict:'id'});}catch(e){console.warn('[SentCor] status update:',e);}
+      try{var cleanStatus={id:user.id,status:'online'};await c.from('profiles').upsert(cleanStatus,{onConflict:'id'});}catch(e){console.warn('[SentCor] status update:',e);}
       window.S.ui.showToast(isLogin?'Добро пожаловать!':'Аккаунт создан!','success');
       window.S.auth.onAuthSuccess(user);
     }catch(err){var m=(err&&err.message)?err.message:'Ошибка';if(m.includes('Invalid login'))m='Неверный email или пароль';if(m.includes('already registered'))m='Email уже зарегистрирован';showErr(m);}
@@ -62,7 +63,7 @@ window.S._pendingAvatar = null;
       if(r.data&&r.data.session&&r.data.session.user){
         user=r.data.session.user;
         try{await fetchP();}catch(e){console.warn('[SentCor] fetchProfile:',e);}
-        try{await c.from('profiles').upsert({id:user.id,status:'online'},{onConflict:'id'});}catch(e){console.warn('[SentCor] status update:',e);}
+        try{var cleanStatus={id:user.id,status:'online'};await c.from('profiles').upsert(cleanStatus,{onConflict:'id'});}catch(e){console.warn('[SentCor] status update:',e);}
         window.S.auth.onAuthSuccess(user);
         return user;
       }
@@ -73,7 +74,7 @@ window.S._pendingAvatar = null;
     try{
       var c=gS();
       if(c&&user){
-        try{await c.from('profiles').upsert({id:user.id,status:'offline'},{onConflict:'id'});}catch(e){console.warn('[SentCor] logout status:',e);}
+        try{var cleanStatus={id:user.id,status:'offline'};await c.from('profiles').upsert(cleanStatus,{onConflict:'id'});}catch(e){console.warn('[SentCor] logout status:',e);}
         await c.auth.signOut();
       }
     }catch(e){console.warn('[SentCor] logout:',e);}
@@ -81,7 +82,7 @@ window.S._pendingAvatar = null;
     if($as)$as.classList.add('active');if($ms)$ms.classList.remove('active');
     window.S.ui.showToast('Вы вышли','info');
   }
-  window.S.auth.init=function(){cD();if($tog)$tog.addEventListener('click',toggle);if($btn)$btn.addEventListener('click',submit);[$pw,$em,$un].forEach(function(el){if(el)el.addEventListener('keydown',function(e){if(e.key==='Enter')submit();});});if($un)$un.style.display='none';toggle();check();};
+  window.S.auth.init=function(){cD();if($tog)$tog.addEventListener('click',toggle);if($btn)$btn.addEventListener('click',function(e){e.preventDefault();submit();});[$pw,$em,$un].forEach(function(el){if(el)el.addEventListener('keydown',function(e){if(e.key==='Enter'){e.preventDefault();submit();}});});if($un)$un.style.display='none';toggle();check();};
   window.S.auth.onAuthSuccess=function(u){user=u;if($as)$as.classList.remove('active');if($ms)$ms.classList.add('active');if(window.S.app&&window.S.app.onLogin)window.S.app.onLogin(u);};
   window.S.auth.logout=logout;
   window.S.auth.getUser=function(){return user;};

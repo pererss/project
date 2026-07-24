@@ -7,6 +7,7 @@ window.S.app = window.S.app || {};
   async function onLogin(u){
     try{window.S.chat.subscribeRealtime();}catch(e){console.warn('[SentCor] subscribe chat:',e);}
     try{window.S.friends.subscribeRealtime();}catch(e){console.warn('[SentCor] subscribe friends:',e);}
+    try{subscribePresence();}catch(e){console.warn('[SentCor] subscribe presence:',e);}
     window.S.friends.onUpdate=refreshAll;
     renderProfileBar();
     try{await refreshAll();}catch(e){console.warn('[SentCor] refreshAll:',e);}
@@ -14,6 +15,35 @@ window.S.app = window.S.app || {};
     renderRailServers();
     renderSubSidebar();
     renderRightSidebar();
+  }
+
+  function subscribePresence(){
+    try{
+      var c=window.S.supabase;if(!c)return;
+      var u=window.S.auth.getUser();if(!u)return;
+      var statusChannel=c.channel('online-users');
+      statusChannel
+        .on('presence',{event:'sync'},function(){
+          try{
+            var state=statusChannel.presenceState();
+            var onlineIds=Object.keys(state).map(function(key){var presences=state[key];return presences[0]?presences[0].user_id:null;}).filter(Boolean);
+            if(window.S.friends&&window.S.friends.getFriends){
+              var frs=window.S.friends.getFriends();
+              frs.forEach(function(f){
+                f.status=onlineIds.indexOf(f.id)>-1?'online':'offline';
+              });
+              renderSubSidebar();
+            }
+          }catch(e){console.warn('[SentCor] presence sync:',e);}
+        })
+        .subscribe(async function(status){
+          if(status==='SUBSCRIBED'){
+            try{
+              await statusChannel.track({user_id:u.id,online_at:new Date().toISOString()});
+            }catch(e){console.warn('[SentCor] presence track:',e);}
+          }
+        });
+    }catch(e){console.warn('[SentCor] subscribePresence:',e);}
   }
 
   async function refreshAll(){
@@ -54,13 +84,15 @@ window.S.app = window.S.app || {};
     try{
       var c=window.S.supabase;if(!c)return;
       var u=window.S.auth.getUser();if(!u){servers=[];return;}
-      var memR=await c.from('server_members').select('server_id,role').eq('user_id',u.id);
-      if(memR.error)throw memR.error;
-      var memberOf=(memR.data||[]).map(function(x){return x.server_id;});
-      if(!memberOf.length){servers=[];return;}
-      var sR=await c.from('servers').select('id,name,icon_url,owner_id').in('id',memberOf);
-      if(sR.error)throw sR.error;
-      servers=sR.data||[];
+      try{
+        var memR=await c.from('server_members').select('server_id,role').eq('user_id',u.id);
+        if(memR.error)throw memR.error;
+        var memberOf=(memR.data||[]).map(function(x){return x.server_id;});
+        if(!memberOf.length){servers=[];return;}
+        var sR=await c.from('servers').select('id,name,icon_url,owner_id').in('id',memberOf);
+        if(sR.error)throw sR.error;
+        servers=sR.data||[];
+      }catch(e){console.warn('[SentCor] fetchServers query:',e);servers=[];}
     }catch(e){
       console.warn('[SentCor] fetchServers:',e);
       servers=[];
@@ -85,8 +117,8 @@ window.S.app = window.S.app || {};
           ]);
         }catch(e){console.warn('[SentCor] insert channels:',e);}
         try{await fetchServers();}catch(e){console.warn('[SentCor] fetchServers:',e);}
-        renderRailServers();
-        renderSubSidebar();
+        try{renderRailServers();}catch(e){console.warn('[SentCor] renderRailServers:',e);}
+        try{renderSubSidebar();}catch(e){console.warn('[SentCor] renderSubSidebar:',e);}
       }
       return{success:true};
     }catch(e){console.warn('[SentCor] createServer:',e);return{error:e.message};}
@@ -732,7 +764,7 @@ window.S.app = window.S.app || {};
       }
       inp.value='';inp.focus();
     }
-    if(sendBtn) sendBtn.addEventListener('click',hSend);
+    if(sendBtn) sendBtn.addEventListener('click',function(e){e.preventDefault();hSend();});
     if(inp){
       inp.addEventListener('keydown',function(e){if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();hSend();}});
     }
