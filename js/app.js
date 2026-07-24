@@ -597,7 +597,7 @@ window.S.app = window.S.app || {};
   async function fetchServerMemberProfile(uid){
     try{
       var c=window.S.supabase;if(!c)return null;
-      var r=await c.from('profiles').select('id,username,avatar_url,status,email,bio,created_at').eq('id',uid).single();
+      var r=await c.from('profiles').select('id,username,avatar_url,status,bio,created_at').eq('id',uid).single();
       return r.data||null;
     }catch(e){console.warn('[SentCor] fetchServerMemberProfile:',e);return null;}
   }
