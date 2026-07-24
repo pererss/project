@@ -80,6 +80,12 @@ window.S.app = window.S.app || {};
   }
 
   /* ========== SERVERS ========== */
+  async function fetchAndRenderServers(){
+    try{await fetchServers();}catch(e){console.warn('[SentCor] fetchServers:',e);}
+    try{renderRailServers();}catch(e){console.warn('[SentCor] renderRailServers:',e);}
+    try{renderSubSidebar();}catch(e){console.warn('[SentCor] renderSubSidebar:',e);}
+  }
+
   async function fetchServers(){
     try{
       var c=window.S.supabase;if(!c)return;
@@ -103,22 +109,12 @@ window.S.app = window.S.app || {};
     try{
       var c=window.S.supabase;if(!c)return{error:'No supabase'};
       var u=window.S.auth.getUser();if(!u)return{error:'Не авторизован'};
-      var r=await c.from('servers').insert({name:name,icon_url:'',owner_id:u.id});
+      var r=await c.from('servers').insert([{name:name,owner_id:u.id}]).select().single();
       if(r.error)throw r.error;
-      var newServer=r.data?r.data[0]:null;
+      var newServer=r.data;
       if(newServer){
-        try{await c.from('server_members').insert({server_id:newServer.id,user_id:u.id,role:'owner'});}catch(e){console.warn('[SentCor] insert member:',e);}
-        try{
-          await c.from('server_channels').insert([
-            {server_id:newServer.id,name:'общий',type:'text'},
-            {server_id:newServer.id,name:'флуд',type:'text'},
-            {server_id:newServer.id,name:'Гостиная',type:'voice'},
-            {server_id:newServer.id,name:'Игровая',type:'voice'}
-          ]);
-        }catch(e){console.warn('[SentCor] insert channels:',e);}
-        try{await fetchServers();}catch(e){console.warn('[SentCor] fetchServers:',e);}
-        try{renderRailServers();}catch(e){console.warn('[SentCor] renderRailServers:',e);}
-        try{renderSubSidebar();}catch(e){console.warn('[SentCor] renderSubSidebar:',e);}
+        try{await c.from('server_members').insert([{server_id:newServer.id,user_id:u.id,role:'owner'}]);}catch(e){console.warn('[SentCor] insert member:',e);}
+        try{await fetchAndRenderServers();}catch(e){console.warn('[SentCor] fetchAndRenderServers:',e);}
       }
       return{success:true};
     }catch(e){console.warn('[SentCor] createServer:',e);return{error:e.message};}
@@ -737,7 +733,8 @@ window.S.app = window.S.app || {};
 
     var createBtn=document.getElementById('create-server-btn');
     if(createBtn){
-      createBtn.addEventListener('click',function(){
+      createBtn.addEventListener('click',function(e){
+        e.preventDefault();
         var html='<div class="settings-form">'+
           '<div class="settings-group"><label class="settings-label">Название сервера</label><input type="text" class="input" id="cs-name" placeholder="Мой сервер" /></div>'+
           '</div>';
@@ -745,7 +742,7 @@ window.S.app = window.S.app || {};
           var name=(document.getElementById('cs-name').value||'').trim();
           if(!name){window.S.ui.showToast('Введите название','error');return;}
           window.S.ui.showLoading('Создание...');
-          try{var r=await createServer(name);if(r.error)throw new Error(r.error);window.S.ui.showToast('Сервер создан!','success');}
+          try{var r=await createServer(name);if(r.error)throw new Error(r.error);window.S.ui.showToast('Сервер создан!','success');window.S.ui.closeModal();}
           catch(e){window.S.ui.showToast(e.message||'Ошибка','error');}
           finally{window.S.ui.hideLoading();}
         });
@@ -768,14 +765,6 @@ window.S.app = window.S.app || {};
     if(inp){
       inp.addEventListener('keydown',function(e){if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();hSend();}});
     }
-
-    var emBtn=document.getElementById('emoji-btn');
-    if(emBtn) emBtn.addEventListener('click',function(e){
-      e.stopPropagation();
-      window.S.ui.showEmojiPicker(emBtn,function(em){
-        var i=document.getElementById('message-input');if(i){i.value+=em;i.focus();}
-      });
-    });
   }
 })();
 

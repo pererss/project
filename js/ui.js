@@ -13,7 +13,6 @@ window.S.icons = {
   settings: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>',
   logout: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>',
   send: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>',
-  smile: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M8 14s1.5 2 4 2 4-2 4-2"/><line x1="9" y1="9" x2="9.01" y2="9"/><line x1="15" y1="9" x2="15.01" y2="9"/></svg>',
   x: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>',
   dots: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/><circle cx="5" cy="12" r="1"/></svg>',
   userPlus: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><line x1="19" y1="8" x2="19" y2="14"/><line x1="22" y1="11" x2="16" y2="11"/></svg>',
@@ -135,23 +134,6 @@ window.S.ui.showToast = function(msg, type) {
   requestAnimationFrame(function(){t.classList.add('visible');});
   setTimeout(function(){t.classList.remove('visible');setTimeout(function(){if(t.parentNode)t.remove();},350);},3000);
 };
-
-/* Emoji Picker */
-window.S.ui.showEmojiPicker = function(anchor, onSelect) {
-  window.S.ui.closeEmojiPicker();
-  var p = document.createElement('div'); p.id='emoji-picker'; p.className='emoji-picker';
-  var emojis = ['😀','😂','😍','🥰','😎','🤔','👍','👎','❤️','🔥','🎉','😢','😡','🤯','💀','👀','✅','❌','⭐','🚀','💜','💚','🧡','💙'];
-  var h = '<div class="emoji-grid">';
-  emojis.forEach(function(e){h+='<button class="emoji-item" data-emoji="'+e+'">'+e+'</button>';});
-  h+='</div>'; p.innerHTML=h; document.body.appendChild(p);
-  var r=anchor.getBoundingClientRect();
-  p.style.left=Math.min(r.left,window.innerWidth-p.offsetWidth-16)+'px';
-  p.style.top=(r.top-p.offsetHeight-8)+'px';
-  if(p.getBoundingClientRect().top<0) p.style.top=(r.bottom+8)+'px';
-  p.querySelectorAll('.emoji-item').forEach(function(b){b.addEventListener('click',function(){onSelect(b.getAttribute('data-emoji'));window.S.ui.closeEmojiPicker();});});
-  setTimeout(function(){document.addEventListener('click',function h(ev){if(!p.contains(ev.target)&&ev.target!==anchor){window.S.ui.closeEmojiPicker();document.removeEventListener('click',h);}});},0);
-};
-window.S.ui.closeEmojiPicker = function(){var o=document.getElementById('emoji-picker');if(o&&o.parentNode)o.remove();};
 
 /* Context Menu */
 window.S.ui.showContextMenu = function(anchor, items) {

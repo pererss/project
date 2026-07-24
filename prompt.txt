@@ -1,15 +1,80 @@
-Преврати дизайн проекта "SentCor" в стильный, монолитный Dark Luxury UI (стеклянные панели, микро-интерактивность, неоновые акценты).
+Ты — Senior Fullstack Developer. Срочно исправить 4 критических бага UI и логики в C:\Users\petr2\Desktop\project!
 
-ТРЕБОВАНИЯ К ДИЗАЙНУ В style.css И index.html:
-1. ТИПОГРАФИКА: Подключи шрифт 'Plus Jakarta Sans' через Google Fonts в index.html и задай его для всего body.
-2. ПАНЕЛИ И САЙДБАРЫ:
-   - Примени эффект Glassmorphism (background: rgba(20, 21, 28, 0.7), backdrop-filter: blur(16px), border: 1px solid rgba(255, 255, 255, 0.08)).
-   - Добавь скругления 16px для всех карточек и контекстных меню.
-3. СООБЩЕНИЯ (ЧАТ):
-   - Мои сообщения: оранжевый градиент linear-gradient(135deg, #FF5500, #CC4400) с мягкой тенью и плавным появлением (fadeIn).
-   - Сообщения собеседника: глубокий серый баббл rgba(255, 255, 255, 0.06) с аккуратными границами.
-4. КНОПКИ И ХОВЕРЫ:
-   - Все кнопки при наведении должны плавно приподниматься (transform: translateY(-2px)) и получать мягкое свечение.
-   - Узкий кастомный скроллбар (5px).
+===============================================================
+1. ФИКС ШИРИНЫ СООБЩЕНИЙ СОБЕСЕДНИКА (КРИТИЧЕСКИЙ БАГ)
+===============================================================
+ПРОБЛЕМА: Сообщения собеседника (слева) сжимаются в узкий вертикальный столбик по 2-3 буквы на строку.
+РЕШЕНИЕ В style.css:
+Убери у `.message-item.received`, `.message-content` и `.message-bubble` любые ограничения `max-width: 120px` или `width: min-content`.
+Задай жестко:
+.message-item.received .message-content,
+.message-item.received .message-bubble {
+  width: fit-content !important;
+  max-width: 70% !important;
+  min-width: 80px !important;
+  display: block !important;
+  word-break: break-word !important;
+  white-space: pre-wrap !important;
+}
 
-Перезапиши и обнови файлы style.css и index.html!
+===============================================================
+2. РАСШИРЕНИЕ НИЖНЕЙ ПАНЕЛИ ПОЛЬЗОВАТЕЛЯ (USER BAR)
+===============================================================
+ПРОБЛЕМА: Панель пользователя находится только внутри саб-панели.
+РЕШЕНИЕ:
+- Нижняя плашка пользователя (`.user-bar` / `#user-profile-bar`) должна занимать ВСЮ ШИРИНУ ЛЕВОГО УГЛА (Левый рельс 72px + Саб-панель 260px = 332px).
+- В style.css сделай ее:
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  width: 332px; /* На всю ширину двух левых колонок */
+  height: 60px;
+  z-index: 100;
+  background: #111217;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 12px;
+- Клик на эту плашку (кроме иконок) открывает редактирование профиля.
+
+===============================================================
+3. ПОЛНОЕ УДАЛЕНИЕ ЭМОДЗИ И ЗАМЕНА НА SVG ИКОНКИ
+===============================================================
+- ПОЛНОСТЬЮ УДАЛИ кнопку с эмодзи-смайликом (😊) из строки ввода сообщений!
+- УДАЛИ любые выпадающие эмодзи-панели и реакторы.
+- ВСЕ иконки в интерфейсе (настройки, выход, поиск, отправка, серверы, друзья, чаты) замени ИСКЛЮЧИТЕЛЬНО на чистые минималистичные SVG-векторы (Lucide стиль). Никаких эмодзи-символов в HTML и JS!
+
+===============================================================
+4. РЕМОНТ СОЗДАНИЯ И ОТОБРАЖЕНИЯ СЕРВЕРОВ
+===============================================================
+В js/app.js и js/ui.js:
+1. В модальном окне "Создать сервер" оставь ТОЛЬКО одно поле: "Название сервера".
+2. В обработчике формы создания сервера ОБЯЗАТЕЛЬНО добавь `e.preventDefault()`.
+3. Код создания сервера:
+   async function createServer(name) {
+     const { data: server, error } = await supabase
+       .from('servers')
+       .insert([{ name: name, owner_id: currentUserId }])
+       .select()
+       .single();
+     if (error) { console.error('Server create err:', error); return; }
+     
+     // Авто-добавление владельца в участники
+     await supabase.from('server_members').insert([{ server_id: server.id, user_id: currentUserId, role: 'owner' }]);
+     
+     // Перерисовать сервера
+     await fetchAndRenderServers();
+     closeModal();
+   }
+4. Функция `fetchAndRenderServers()` должна загружать сервера из таблицы `servers` и сразу отрисовывать их иконками под кнопкой "+".
+
+ПЕРЕЗАПИШИ ВСЕ 8 ФАЙЛОВ В C:\Users\petr2\Desktop\project:
+1. index.html
+2. style.css
+3. js/config.js
+4. js/ui.js
+5. js/auth.js
+6. js/chat.js
+7. js/friends.js
+8. js/app.js
