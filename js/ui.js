@@ -87,7 +87,7 @@ window.S.utils.createServerAvatarHTML = function(name, size) {
   var n = window.S.utils.escapeHtml(name || 'S');
   var letters = n.substring(0, 2).toUpperCase();
   var fs = Math.round(size * 0.35);
-  return '<div class="srv-avatar" style="width:'+size+'px;height:'+size+'px;font-size:'+fs+'px;border-radius:var(--r-lg);">'+letters+'</div>';
+  return '<div class="srv-avatar" style="width:'+size+'px;height:'+size+'px;font-size:'+fs+'px;border-radius:50%;">'+letters+'</div>';
 };
 
 /* Status */

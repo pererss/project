@@ -665,7 +665,7 @@ window.S.app = window.S.app || {};
     var sc=p?window.S.utils.getStatusColor(p.status):'#71717A';
     var bar=document.createElement('div');
     bar.className='profile-bar';
-    bar.style.cssText='padding:8px;border-top:1px solid rgba(255,255,255,0.08);display:flex;align-items:center;gap:8px;background:rgba(9,9,11,0.5);cursor:pointer;transition:all 0.2s cubic-bezier(0.4,0,0.2,1);margin-top:auto;';
+    bar.style.cssText='display:flex;align-items:center;gap:8px;cursor:pointer;transition:all 0.2s cubic-bezier(0.4,0,0.2,1);';
     bar.innerHTML='<div style="position:relative;flex-shrink:0;">'+window.S.utils.createAvatarHTML(nm,'',34)+'<span class="status-dot" style="background:'+sc+';"></span></div>'+
       '<div style="flex:1;min-width:0;"><div style="font-size:13px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">'+window.S.utils.escapeHtml(nm)+'</div><div style="font-size:11px;color:var(--text-f);">'+window.S.utils.getStatusLabel(p?p.status:'offline')+'</div></div>'+
       '<div style="display:flex;gap:2px;flex-shrink:0;">'+
@@ -673,8 +673,8 @@ window.S.app = window.S.app || {};
       '<button class="btn-icon" id="pb-logout" title="Выйти" style="width:30px;height:30px;">'+window.S.icons.logout+'</button></div>';
     sidebar.appendChild(bar);
 
-    bar.addEventListener('mouseenter',function(){bar.style.background='rgba(255,255,255,0.08)';});
-    bar.addEventListener('mouseleave',function(){bar.style.background='rgba(9,9,11,0.5)';});
+    bar.addEventListener('mouseenter',function(){bar.style.background='#181A24';});
+    bar.addEventListener('mouseleave',function(){bar.style.background='#101117';});
     bar.addEventListener('click',function(e){
       if(e.target.closest('#pb-settings')||e.target.closest('#pb-logout'))return;
       openProfileEdit();
