@@ -42,43 +42,31 @@
 
     <!-- Rail Navigation (72px) -->
     <nav class="server-rail" id="server-rail">
-      <!-- Logo -->
       <div class="rail-icon rail-icon--logo" data-rail="logo" title="SentCor">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <rect x="3" y="3" width="18" height="18" rx="3" transform="rotate(45 12 12)" />
-          <rect x="7" y="7" width="10" height="10" rx="1" transform="rotate(45 12 12)" />
-        </svg>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="3" transform="rotate(45 12 12)" /><rect x="7" y="7" width="10" height="10" rx="1" transform="rotate(45 12 12)" /></svg>
       </div>
       <div class="rail-divider"></div>
-      <!-- Chats -->
       <div class="rail-icon active" data-rail="chats" title="Чаты">
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
       </div>
-      <!-- Friends -->
       <div class="rail-icon" data-rail="friends" title="Друзья">
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
       </div>
-      <!-- Servers (HARDCODED in HTML) -->
       <div class="rail-icon" data-rail="servers" title="Серверы">
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
       </div>
       <div class="rail-divider"></div>
-      <!-- Dynamic server icons will be injected here -->
       <div id="server-list-rail"></div>
-      <!-- Create Server -->
       <div class="rail-icon rail-icon--add" id="create-server-btn" title="Создать сервер">
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
       </div>
     </nav>
 
     <!-- Sub-sidebar (260px) -->
-    <aside class="sub-sidebar" id="sub-sidebar">
-      <!-- Content rendered dynamically by JS -->
-    </aside>
+    <aside class="sub-sidebar" id="sub-sidebar"></aside>
 
     <!-- Main Content Area -->
     <main class="main-content" id="main-content">
-      <!-- Chat Header -->
       <div class="chat-header" id="chat-header">
         <div id="chat-header-avatar"></div>
         <div class="chat-header-info">
@@ -86,35 +74,29 @@
           <div id="chat-header-status" class="header-status"></div>
         </div>
       </div>
-
-      <!-- Messages -->
       <div id="messages-area" class="messages-area">
         <div class="messages-spacer"></div>
         <div class="empty-state" id="empty-chat">
-          <div class="empty-icon"><svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg></div>
+          <div class="empty-icon"><svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg></div>
           <div class="empty-title">Выберите диалог</div>
           <div class="empty-text">Выберите чат слева или начните новый разговор</div>
         </div>
       </div>
-
-      <!-- Message Input -->
       <div class="message-input-area" id="message-input-area" style="display:none;">
         <div class="message-input-wrapper">
           <textarea id="message-input" class="message-input" placeholder="Написать сообщение..." rows="1"></textarea>
           <button id="emoji-btn" class="emoji-trigger" title="Эмодзи">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M8 14s1.5 2 4 2 4-2 4-2"/><line x1="9" y1="9" x2="9.01" y2="9"/><line x1="15" y1="9" x2="15.01" y2="9"/></svg>
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M8 14s1.5 2 4 2 4-2 4-2"/><line x1="9" y1="9" x2="9.01" y2="9"/><line x1="15" y1="9" x2="15.01" y2="9"/></svg>
           </button>
           <button id="send-btn" class="send-btn" title="Отправить">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
           </button>
         </div>
       </div>
     </main>
 
     <!-- Right Sidebar (240px) -->
-    <aside class="right-sidebar" id="right-sidebar">
-      <!-- Content rendered dynamically by JS -->
-    </aside>
+    <aside class="right-sidebar" id="right-sidebar"></aside>
 
   </div>
 

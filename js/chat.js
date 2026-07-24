@@ -1,4 +1,4 @@
-/* SentCor — Chat (Bubble-style, fixed layout) */
+/* SentCor — Chat */
 window.S = window.S || {};
 window.S.chat = window.S.chat || {};
 (function(){
@@ -64,7 +64,7 @@ window.S.chat = window.S.chat || {};
       if(inputArea) inputArea.style.display='none';
       box.innerHTML='<div class="messages-spacer"></div>'+
         '<div class="empty-state" id="empty-chat">'+
-        '<div class="empty-icon"><svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg></div>'+
+        '<div class="empty-icon"><svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg></div>'+
         '<div class="empty-title">Выберите диалог</div>'+
         '<div class="empty-text">Выберите чат слева или начните новый разговор</div></div>';
       return;
@@ -74,7 +74,7 @@ window.S.chat = window.S.chat || {};
     if(!msgs.length){
       box.innerHTML='<div class="messages-spacer"></div>'+
         '<div class="empty-state">'+
-        '<div class="empty-icon"><svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg></div>'+
+        '<div class="empty-icon"><svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg></div>'+
         '<div class="empty-title">Начните диалог</div>'+
         '<div class="empty-text">Отправьте первое сообщение!</div></div>';
       return;

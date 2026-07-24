@@ -2,7 +2,7 @@
 window.S = window.S || {};
 window.S.app = window.S.app || {};
 (function(){
-  var view='chats',convs=[],frTab='all',servers=[],activeServer=null,activeChannel=null,serverMessages=[],_serverSub=false;
+  var view='chats',convs=[],frTab='all',servers=[],activeServer=null,activeChannel=null,serverMessages=[];
 
   async function onLogin(u){
     try{window.S.chat.subscribeRealtime();}catch(e){console.error('[SentCor] subscribe chat:',e);}
@@ -67,21 +67,21 @@ window.S.app = window.S.app || {};
     }
   }
 
-  async function createServer(name, iconUrl){
+  async function createServer(name){
     try{
       var c=window.S.supabase;if(!c)return{error:'No supabase'};
       var u=window.S.auth.getUser();if(!u)return{error:'Не авторизован'};
-      var r=await c.from('servers').insert({name:name,icon_url:iconUrl||'',owner_id:u.id});
+      var r=await c.from('servers').insert(window.S.utils.cleanPayload({name:name,icon_url:'',owner_id:u.id}));
       if(r.error)throw r.error;
       var newServer=r.data?r.data[0]:null;
       if(newServer){
-        try{await c.from('server_members').insert({server_id:newServer.id,user_id:u.id,role:'owner'});}catch(e){console.error('[SentCor] insert member:',e);}
+        try{await c.from('server_members').insert(window.S.utils.cleanPayload({server_id:newServer.id,user_id:u.id,role:'owner'}));}catch(e){console.error('[SentCor] insert member:',e);}
         try{
           await c.from('server_channels').insert([
-            {server_id:newServer.id,name:'общий',type:'text'},
-            {server_id:newServer.id,name:'флуд',type:'text'},
-            {server_id:newServer.id,name:'Гостиная',type:'voice'},
-            {server_id:newServer.id,name:'Игровая',type:'voice'}
+            window.S.utils.cleanPayload({server_id:newServer.id,name:'общий',type:'text'}),
+            window.S.utils.cleanPayload({server_id:newServer.id,name:'флуд',type:'text'}),
+            window.S.utils.cleanPayload({server_id:newServer.id,name:'Гостиная',type:'voice'}),
+            window.S.utils.cleanPayload({server_id:newServer.id,name:'Игровая',type:'voice'})
           ]);
         }catch(e){console.error('[SentCor] insert channels:',e);}
         try{await fetchServers();}catch(e){console.error('[SentCor] fetchServers:',e);}
@@ -109,7 +109,7 @@ window.S.app = window.S.app || {};
       var memberOf=(r.data||[]);
       if(!memberOf.length)return[];
       var uids=memberOf.map(function(x){return x.user_id;});
-      var p=await c.from('profiles').select('id,username,avatar_url,status,bio,created_at').in('id',uids);
+      var p=await c.from('profiles').select('id,username,avatar_url,status,bio,custom_status,created_at').in('id',uids);
       if(p.error)throw p.error;
       var pm={};(p.data||[]).forEach(function(x){pm[x.id]=x;});
       return memberOf.map(function(m){return{profile:pm[m.user_id]||null,role:m.role};});
@@ -129,7 +129,7 @@ window.S.app = window.S.app || {};
     try{
       var c=window.S.supabase;if(!c)return;
       var u=window.S.auth.getUser();if(!u)return;
-      await c.from('server_messages').insert({sender_id:u.id,content:content.trim(),server_id:serverId,channel_id:channelId});
+      await c.from('server_messages').insert(window.S.utils.cleanPayload({sender_id:u.id,content:content.trim(),server_id:serverId,channel_id:channelId}));
     }catch(e){console.error('[SentCor] sendServerMessage:',e);window.S.ui.showToast('Ошибка отправки','error');}
   }
 
@@ -146,13 +146,8 @@ window.S.app = window.S.app || {};
     var container=document.getElementById('server-list-rail');if(!container)return;
     var h='';
     servers.forEach(function(s){
-      var letter=s.name? s.name.charAt(0).toUpperCase():'S';
       var cls='rail-server-icon'+(activeServer&&activeServer.id===s.id?' active':'');
-      if(s.icon_url){
-        h+='<div class="'+cls+'" data-sid="'+s.id+'" title="'+window.S.utils.escapeHtml(s.name)+'"><img src="'+window.S.utils.escapeHtml(s.icon_url)+'" alt="'+window.S.utils.escapeHtml(s.name)+'" onerror="this.style.display=\'none\';this.parentNode.textContent=\''+letter+'\';" /></div>';
-      }else{
-        h+='<div class="'+cls+'" data-sid="'+s.id+'" title="'+window.S.utils.escapeHtml(s.name)+'">'+letter+'</div>';
-      }
+      h+='<div class="'+cls+'" data-sid="'+s.id+'" title="'+window.S.utils.escapeHtml(s.name)+'">'+window.S.utils.createServerAvatarHTML(s.name,48)+'</div>';
     });
     container.innerHTML=h;
     container.querySelectorAll('.rail-server-icon').forEach(function(el){
@@ -229,11 +224,11 @@ window.S.app = window.S.app || {};
     var box=document.getElementById('messages-area');if(!box)return;
     var u=window.S.auth.getUser();
     if(!activeServer||!activeChannel){
-      box.innerHTML='<div class="messages-spacer"></div><div class="empty-state"><div class="empty-icon"><svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg></div><div class="empty-title">Выберите канал</div><div class="empty-text">Выберите текстовый канал слева</div></div>';
+      box.innerHTML='<div class="messages-spacer"></div><div class="empty-state"><div class="empty-icon"><svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg></div><div class="empty-title">Выберите канал</div><div class="empty-text">Выберите текстовый канал слева</div></div>';
       return;
     }
     if(!serverMessages.length){
-      box.innerHTML='<div class="messages-spacer"></div><div class="empty-state"><div class="empty-icon"><svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg></div><div class="empty-title">Начните общение</div><div class="empty-text">Отправьте первое сообщение в # '+window.S.utils.escapeHtml(activeChannel.name)+'</div></div>';
+      box.innerHTML='<div class="messages-spacer"></div><div class="empty-state"><div class="empty-icon"><svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg></div><div class="empty-title">Начните общение</div><div class="empty-text">Отправьте первое сообщение в # '+window.S.utils.escapeHtml(activeChannel.name)+'</div></div>';
       return;
     }
     var html='<div class="messages-spacer"></div>';
@@ -434,9 +429,8 @@ window.S.app = window.S.app || {};
       h+='<div class="empty-state empty-state--sm"><div class="empty-text">Нет серверов. Создайте первый!</div></div>';
     }else{
       servers.forEach(function(s){
-        var letter=s.name?s.name.charAt(0).toUpperCase():'S';
         h+='<div class="conv-item" data-sid="'+s.id+'">'+
-          '<div class="conv-av"><div class="avatar" style="width:36px;height:36px;background:var(--bg-glass-a);"><span class="avatar-fb" style="font-size:16px;">'+letter+'</span></div></div>'+
+          '<div class="conv-av">'+window.S.utils.createServerAvatarHTML(s.name,36)+'</div>'+
           '<div class="conv-info"><div class="conv-name">'+window.S.utils.escapeHtml(s.name)+'</div></div></div>';
       });
     }
@@ -481,14 +475,16 @@ window.S.app = window.S.app || {};
     var sc=window.S.utils.getStatusColor(profile.status);
     var sl=window.S.utils.getStatusLabel(profile.status);
     var regDate=window.S.utils.formatRegDate(profile.created_at);
+    var customStatus=profile.custom_status||'';
     var h='<div class="rs-profile">'+
       '<div class="rs-profile-banner"></div>'+
       '<div class="rs-profile-avatar">'+window.S.utils.createAvatarHTML(profile.username,profile.avatar_url,64)+'</div>'+
       '<div class="rs-profile-name">'+window.S.utils.escapeHtml(profile.username)+'</div>'+
+      (customStatus?'<div class="rs-profile-status" style="color:var(--accent);">"'+window.S.utils.escapeHtml(customStatus)+'"</div>':'')+
       '<div class="rs-profile-status"><span class="sd" style="background:'+sc+'"></span>'+sl+'</div>'+
       (profile.bio?'<div class="rs-profile-bio">'+window.S.utils.escapeHtml(profile.bio)+'</div>':'')+
       '<div class="rs-profile-meta">'+
-      '<div class="rs-profile-meta-item">'+window.S.icons.bell+' Зарегистрирован: '+regDate+'</div>'+
+      '<div class="rs-profile-meta-item">'+window.S.icons.calendar+' Зарегистрирован: '+regDate+'</div>'+
       '</div>'+
       '<div class="rs-profile-actions">'+
       '<button class="btn btn--ghost btn--sm" id="rs-copy-id" style="width:100%;">'+window.S.icons.copy+' Скопировать ID</button>'+
@@ -523,7 +519,7 @@ window.S.app = window.S.app || {};
     bindMemberActions(rs);
   }
 
-  function renderMemberItem(m, currentUser){
+  function renderMemberItem(m){
     var p=m.profile;if(!p)return'';
     var sc=window.S.utils.getStatusColor(p.status);
     var isOwner=m.role==='owner';
@@ -568,7 +564,7 @@ window.S.app = window.S.app || {};
   async function fetchServerMemberProfile(uid){
     try{
       var c=window.S.supabase;if(!c)return null;
-      var r=await c.from('profiles').select('id,username,avatar_url,status,email,bio,created_at').eq('id',uid).single();
+      var r=await c.from('profiles').select('id,username,avatar_url,status,email,bio,custom_status,created_at').eq('id',uid).single();
       return r.data||null;
     }catch(e){console.error('[SentCor] fetchServerMemberProfile:',e);return null;}
   }
@@ -627,78 +623,7 @@ window.S.app = window.S.app || {};
     }
   }
 
-  /* ========== PROFILE BAR ========== */
   function renderProfileBar(){}
-
-  /* ========== INIT UI ========== */
-  function initUI(){
-    /* Rail icons */
-    document.querySelectorAll('.rail-icon').forEach(function(el){
-      el.addEventListener('click',function(){
-        var v=el.getAttribute('data-rail');
-        if(v==='logo'){
-          var pr=window.S.auth.getProfile();if(pr)window.S.ui.openProfileModal(pr);
-          return;
-        }
-        activeServer=null;activeChannel=null;
-        if(v==='chats'){view='chats';window.S.chat.setActive(null,null);document.getElementById('chat-header-name').textContent='';document.getElementById('chat-header-status').textContent='';document.getElementById('chat-header-avatar').innerHTML='';}
-        else if(v==='friends'){view='friends';}
-        else if(v==='servers'){view='servers';}
-        renderRailActive();renderSubSidebar();renderRightSidebar();
-      });
-    });
-
-    /* Create server button */
-    var createBtn=document.getElementById('create-server-btn');
-    if(createBtn){
-      createBtn.addEventListener('click',function(){
-        var html='<div class="settings-form">'+
-          '<div class="settings-group"><label class="settings-label">Название сервера</label><input type="text" class="input" id="cs-name" placeholder="Мой сервер" /></div>'+
-          '<div class="settings-group"><label class="settings-label">URL иконки (необязательно)</label><input type="text" class="input" id="cs-icon" placeholder="https://..." /></div>'+
-          '</div>';
-        window.S.ui.openModal('Создать сервер', html, async function(){
-          var name=(document.getElementById('cs-name').value||'').trim();
-          var icon=(document.getElementById('cs-icon').value||'').trim();
-          if(!name){window.S.ui.showToast('Введите название','error');return;}
-          window.S.ui.showLoading('Создание...');
-          try{var r=await createServer(name,icon);if(r.error)throw new Error(r.error);window.S.ui.showToast('Сервер создан!','success');}
-          catch(e){window.S.ui.showToast(e.message||'Ошибка','error');}
-          finally{window.S.ui.hideLoading();}
-        });
-      });
-    }
-
-    /* Message send */
-    var sendBtn=document.getElementById('send-btn');
-    var inp=document.getElementById('message-input');
-    function hSend(){
-      if(!inp)return;var t=inp.value;if(!t.trim())return;
-      if(view==='servers'&&activeServer&&activeChannel){
-        sendServerMessage(activeServer.id,activeChannel.id,t);
-        setTimeout(function(){renderServerMessages();},300);
-      }else{
-        window.S.chat.sendMessage(t);
-      }
-      inp.value='';inp.focus();
-    }
-    if(sendBtn) sendBtn.addEventListener('click',hSend);
-    if(inp){
-      inp.addEventListener('keydown',function(e){if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();hSend();}});
-    }
-
-    /* Emoji */
-    var emBtn=document.getElementById('emoji-btn');
-    if(emBtn) emBtn.addEventListener('click',function(e){
-      e.stopPropagation();
-      window.S.ui.showEmojiPicker(emBtn,function(em){
-        var i=document.getElementById('message-input');if(i){i.value+=em;i.focus();}
-      });
-    });
-
-    renderProfileBarInSubSidebar();
-  }
-
-  function renderProfileBarInSubSidebar(){}
 
   function addProfileBarToSubSidebar(){
     var sidebar=document.getElementById('sub-sidebar');if(!sidebar)return;
@@ -709,7 +634,7 @@ window.S.app = window.S.app || {};
     var sc=p?window.S.utils.getStatusColor(p.status):'#71717A';
     var bar=document.createElement('div');
     bar.className='profile-bar';
-    bar.style.cssText='padding:8px;border-top:1px solid rgba(255,255,255,0.08);display:flex;align-items:center;gap:8px;background:rgba(9,9,11,0.5);cursor:pointer;transition:all 0.2s cubic-bezier(0.4,0,0.2,1);';
+    bar.style.cssText='padding:8px;border-top:1px solid rgba(255,255,255,0.08);display:flex;align-items:center;gap:8px;background:rgba(9,9,11,0.5);cursor:pointer;transition:all 0.2s cubic-bezier(0.4,0,0.2,1);margin-top:auto;';
     bar.innerHTML='<div style="position:relative;flex-shrink:0;">'+window.S.utils.createAvatarHTML(nm,'',34)+'<span class="status-dot" style="background:'+sc+';"></span></div>'+
       '<div style="flex:1;min-width:0;"><div style="font-size:13px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">'+window.S.utils.escapeHtml(nm)+'</div><div style="font-size:11px;color:var(--text-f);">'+window.S.utils.getStatusLabel(p?p.status:'offline')+'</div></div>'+
       '<div style="display:flex;gap:2px;flex-shrink:0;">'+
@@ -743,6 +668,8 @@ window.S.app = window.S.app || {};
     });
   }
 
+  function renderProfileBarInSubSidebar(){}
+
   var _obs=new MutationObserver(function(){
     var sidebar=document.getElementById('sub-sidebar');if(!sidebar)return;
     var bar=sidebar.querySelector('.profile-bar');
@@ -759,6 +686,65 @@ window.S.app = window.S.app || {};
   window.S.app.refreshConversations=async function(){await buildConvs();renderSubSidebar();};
   window.S.app.openChat=openChat;
   window.S.app.initUI=initUI;
+
+  function initUI(){
+    document.querySelectorAll('.rail-icon').forEach(function(el){
+      el.addEventListener('click',function(){
+        var v=el.getAttribute('data-rail');
+        if(v==='logo'){
+          var pr=window.S.auth.getProfile();if(pr)window.S.ui.openProfileModal(pr);
+          return;
+        }
+        activeServer=null;activeChannel=null;
+        if(v==='chats'){view='chats';window.S.chat.setActive(null,null);document.getElementById('chat-header-name').textContent='';document.getElementById('chat-header-status').textContent='';document.getElementById('chat-header-avatar').innerHTML='';}
+        else if(v==='friends'){view='friends';}
+        else if(v==='servers'){view='servers';}
+        renderRailActive();renderSubSidebar();renderRightSidebar();
+      });
+    });
+
+    var createBtn=document.getElementById('create-server-btn');
+    if(createBtn){
+      createBtn.addEventListener('click',function(){
+        var html='<div class="settings-form">'+
+          '<div class="settings-group"><label class="settings-label">Название сервера</label><input type="text" class="input" id="cs-name" placeholder="Мой сервер" /></div>'+
+          '</div>';
+        window.S.ui.openModal('Создать сервер', html, async function(){
+          var name=(document.getElementById('cs-name').value||'').trim();
+          if(!name){window.S.ui.showToast('Введите название','error');return;}
+          window.S.ui.showLoading('Создание...');
+          try{var r=await createServer(name);if(r.error)throw new Error(r.error);window.S.ui.showToast('Сервер создан!','success');}
+          catch(e){window.S.ui.showToast(e.message||'Ошибка','error');}
+          finally{window.S.ui.hideLoading();}
+        });
+      });
+    }
+
+    var sendBtn=document.getElementById('send-btn');
+    var inp=document.getElementById('message-input');
+    function hSend(){
+      if(!inp)return;var t=inp.value;if(!t.trim())return;
+      if(view==='servers'&&activeServer&&activeChannel){
+        sendServerMessage(activeServer.id,activeChannel.id,t);
+        setTimeout(function(){renderServerMessages();},300);
+      }else{
+        window.S.chat.sendMessage(t);
+      }
+      inp.value='';inp.focus();
+    }
+    if(sendBtn) sendBtn.addEventListener('click',hSend);
+    if(inp){
+      inp.addEventListener('keydown',function(e){if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();hSend();}});
+    }
+
+    var emBtn=document.getElementById('emoji-btn');
+    if(emBtn) emBtn.addEventListener('click',function(e){
+      e.stopPropagation();
+      window.S.ui.showEmojiPicker(emBtn,function(em){
+        var i=document.getElementById('message-input');if(i){i.value+=em;i.focus();}
+      });
+    });
+  }
 })();
 
 document.addEventListener('DOMContentLoaded',function(){window.S.auth.init();window.S.app.initUI();});
