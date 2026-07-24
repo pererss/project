@@ -5,21 +5,21 @@ window.S.app = window.S.app || {};
   var view='chats',convs=[],frTab='all',servers=[],activeServer=null,activeChannel=null,serverMessages=[];
 
   async function onLogin(u){
-    try{window.S.chat.subscribeRealtime();}catch(e){console.error('[SentCor] subscribe chat:',e);}
-    try{window.S.friends.subscribeRealtime();}catch(e){console.error('[SentCor] subscribe friends:',e);}
+    try{window.S.chat.subscribeRealtime();}catch(e){console.warn('[SentCor] subscribe chat:',e);}
+    try{window.S.friends.subscribeRealtime();}catch(e){console.warn('[SentCor] subscribe friends:',e);}
     window.S.friends.onUpdate=refreshAll;
     renderProfileBar();
-    try{await refreshAll();}catch(e){console.error('[SentCor] refreshAll:',e);}
-    try{await fetchServers();}catch(e){console.error('[SentCor] fetchServers:',e);}
+    try{await refreshAll();}catch(e){console.warn('[SentCor] refreshAll:',e);}
+    try{await fetchServers();}catch(e){console.warn('[SentCor] fetchServers:',e);}
     renderRailServers();
     renderSubSidebar();
     renderRightSidebar();
   }
 
   async function refreshAll(){
-    try{await window.S.friends.fetchFriends();}catch(e){console.error('[SentCor] fetchFriends:',e);}
-    try{await window.S.friends.fetchPending();}catch(e){console.error('[SentCor] fetchPending:',e);}
-    try{await buildConvs();}catch(e){console.error('[SentCor] buildConvs:',e);}
+    try{await window.S.friends.fetchFriends();}catch(e){console.warn('[SentCor] fetchFriends:',e);}
+    try{await window.S.friends.fetchPending();}catch(e){console.warn('[SentCor] fetchPending:',e);}
+    try{await buildConvs();}catch(e){console.warn('[SentCor] buildConvs:',e);}
     renderSubSidebar();
     updateBadge();
   }
@@ -44,7 +44,7 @@ window.S.app = window.S.app || {};
       convs=frs.map(function(f){var ms=all.filter(function(m){return(m.sender_id===u.id&&m.receiver_id===f.id)||(m.sender_id===f.id&&m.receiver_id===u.id);});var last=ms.length?ms[0]:null;return{friend:f,lastMessage:last?last.content:'',lastTime:last?last.created_at:''};});
       convs.sort(function(a,b){if(!a.lastTime&&!b.lastTime)return 0;if(!a.lastTime)return 1;if(!b.lastTime)return-1;return new Date(b.lastTime)-new Date(a.lastTime);});
     }catch(e){
-      console.error('[SentCor] buildConvs:',e);
+      console.warn('[SentCor] buildConvs:',e);
       convs=frs.map(function(f){return{friend:f,lastMessage:'',lastTime:''};});
     }
   }
@@ -62,7 +62,7 @@ window.S.app = window.S.app || {};
       if(sR.error)throw sR.error;
       servers=sR.data||[];
     }catch(e){
-      console.error('[SentCor] fetchServers:',e);
+      console.warn('[SentCor] fetchServers:',e);
       servers=[];
     }
   }
@@ -71,25 +71,25 @@ window.S.app = window.S.app || {};
     try{
       var c=window.S.supabase;if(!c)return{error:'No supabase'};
       var u=window.S.auth.getUser();if(!u)return{error:'Не авторизован'};
-      var r=await c.from('servers').insert(window.S.utils.cleanPayload({name:name,icon_url:'',owner_id:u.id}));
+      var r=await c.from('servers').insert({name:name,icon_url:'',owner_id:u.id});
       if(r.error)throw r.error;
       var newServer=r.data?r.data[0]:null;
       if(newServer){
-        try{await c.from('server_members').insert(window.S.utils.cleanPayload({server_id:newServer.id,user_id:u.id,role:'owner'}));}catch(e){console.error('[SentCor] insert member:',e);}
+        try{await c.from('server_members').insert({server_id:newServer.id,user_id:u.id,role:'owner'});}catch(e){console.warn('[SentCor] insert member:',e);}
         try{
           await c.from('server_channels').insert([
-            window.S.utils.cleanPayload({server_id:newServer.id,name:'общий',type:'text'}),
-            window.S.utils.cleanPayload({server_id:newServer.id,name:'флуд',type:'text'}),
-            window.S.utils.cleanPayload({server_id:newServer.id,name:'Гостиная',type:'voice'}),
-            window.S.utils.cleanPayload({server_id:newServer.id,name:'Игровая',type:'voice'})
+            {server_id:newServer.id,name:'общий',type:'text'},
+            {server_id:newServer.id,name:'флуд',type:'text'},
+            {server_id:newServer.id,name:'Гостиная',type:'voice'},
+            {server_id:newServer.id,name:'Игровая',type:'voice'}
           ]);
-        }catch(e){console.error('[SentCor] insert channels:',e);}
-        try{await fetchServers();}catch(e){console.error('[SentCor] fetchServers:',e);}
+        }catch(e){console.warn('[SentCor] insert channels:',e);}
+        try{await fetchServers();}catch(e){console.warn('[SentCor] fetchServers:',e);}
         renderRailServers();
         renderSubSidebar();
       }
       return{success:true};
-    }catch(e){console.error('[SentCor] createServer:',e);return{error:e.message};}
+    }catch(e){console.warn('[SentCor] createServer:',e);return{error:e.message};}
   }
 
   async function fetchServerChannels(serverId){
@@ -98,7 +98,7 @@ window.S.app = window.S.app || {};
       var r=await c.from('server_channels').select('id,name,type').eq('server_id',serverId).order('created_at',{ascending:true});
       if(r.error)throw r.error;
       return r.data||[];
-    }catch(e){console.error('[SentCor] fetchServerChannels:',e);return[];}
+    }catch(e){console.warn('[SentCor] fetchServerChannels:',e);return[];}
   }
 
   async function fetchServerMembers(serverId){
@@ -109,11 +109,11 @@ window.S.app = window.S.app || {};
       var memberOf=(r.data||[]);
       if(!memberOf.length)return[];
       var uids=memberOf.map(function(x){return x.user_id;});
-      var p=await c.from('profiles').select('id,username,avatar_url,status,bio,custom_status,created_at').in('id',uids);
+      var p=await c.from('profiles').select('id,username,avatar_url,status,bio,created_at').in('id',uids);
       if(p.error)throw p.error;
       var pm={};(p.data||[]).forEach(function(x){pm[x.id]=x;});
       return memberOf.map(function(m){return{profile:pm[m.user_id]||null,role:m.role};});
-    }catch(e){console.error('[SentCor] fetchServerMembers:',e);return[];}
+    }catch(e){console.warn('[SentCor] fetchServerMembers:',e);return[];}
   }
 
   async function fetchServerMessages(serverId, channelId){
@@ -122,15 +122,21 @@ window.S.app = window.S.app || {};
       var r=await c.from('server_messages').select('id,sender_id,content,created_at,server_id,channel_id').eq('server_id',serverId).eq('channel_id',channelId).order('created_at',{ascending:true});
       if(r.error)throw r.error;
       return r.data||[];
-    }catch(e){console.error('[SentCor] fetchServerMessages:',e);return[];}
+    }catch(e){console.warn('[SentCor] fetchServerMessages:',e);return[];}
   }
 
   async function sendServerMessage(serverId, channelId, content){
     try{
       var c=window.S.supabase;if(!c)return;
       var u=window.S.auth.getUser();if(!u)return;
-      await c.from('server_messages').insert(window.S.utils.cleanPayload({sender_id:u.id,content:content.trim(),server_id:serverId,channel_id:channelId}));
-    }catch(e){console.error('[SentCor] sendServerMessage:',e);window.S.ui.showToast('Ошибка отправки','error');}
+      var cleanMessageData = {
+        sender_id: u.id,
+        content: content.trim(),
+        server_id: serverId,
+        channel_id: channelId
+      };
+      await c.from('server_messages').insert(cleanMessageData);
+    }catch(e){console.warn('[SentCor] sendServerMessage:',e);window.S.ui.showToast('Ошибка отправки','error');}
   }
 
   async function kickMember(serverId, userId){
@@ -138,7 +144,7 @@ window.S.app = window.S.app || {};
       var c=window.S.supabase;if(!c)return{error:'No supabase'};
       await c.from('server_members').delete().eq('server_id',serverId).eq('user_id',userId);
       return{success:true};
-    }catch(e){console.error('[SentCor] kickMember:',e);return{error:e.message};}
+    }catch(e){console.warn('[SentCor] kickMember:',e);return{error:e.message};}
   }
 
   /* ========== RAIL SERVERS ========== */
@@ -216,7 +222,7 @@ window.S.app = window.S.app || {};
     var headerStatus=document.getElementById('chat-header-status');
     if(headerName) headerName.textContent='# '+channel.name;
     if(headerStatus) headerStatus.textContent=activeServer?activeServer.name:'';
-    try{serverMessages=await fetchServerMessages(activeServer.id,channel.id);}catch(e){console.error('[SentCor] openServerChannel:',e);serverMessages=[];}
+    try{serverMessages=await fetchServerMessages(activeServer.id,channel.id);}catch(e){console.warn('[SentCor] openServerChannel:',e);serverMessages=[];}
     renderServerMessages();
   }
 
@@ -251,7 +257,7 @@ window.S.app = window.S.app || {};
     requestAnimationFrame(function(){box.scrollTop=box.scrollHeight;});
   }
 
-  /* ========== SUB-SIDEBAR RENDERING ========== */
+  /* ========== SUB-SIDEBAR ========== */
   function renderSubSidebar(){
     var sidebar=document.getElementById('sub-sidebar');if(!sidebar)return;
     if(view==='servers'&&activeServer){renderServerPanel();return;}
@@ -416,7 +422,7 @@ window.S.app = window.S.app || {};
         });
       });
     }catch(e){
-      console.error('[SentCor] doSearchFriends:',e);
+      console.warn('[SentCor] doSearchFriends:',e);
       res.innerHTML='<div class="empty-state empty-state--sm"><div class="empty-text">Ошибка</div></div>';
     }finally{window.S.ui.hideLoading();}
   }
@@ -475,12 +481,10 @@ window.S.app = window.S.app || {};
     var sc=window.S.utils.getStatusColor(profile.status);
     var sl=window.S.utils.getStatusLabel(profile.status);
     var regDate=window.S.utils.formatRegDate(profile.created_at);
-    var customStatus=profile.custom_status||'';
     var h='<div class="rs-profile">'+
       '<div class="rs-profile-banner"></div>'+
       '<div class="rs-profile-avatar">'+window.S.utils.createAvatarHTML(profile.username,profile.avatar_url,64)+'</div>'+
       '<div class="rs-profile-name">'+window.S.utils.escapeHtml(profile.username)+'</div>'+
-      (customStatus?'<div class="rs-profile-status" style="color:var(--accent);">"'+window.S.utils.escapeHtml(customStatus)+'"</div>':'')+
       '<div class="rs-profile-status"><span class="sd" style="background:'+sc+'"></span>'+sl+'</div>'+
       (profile.bio?'<div class="rs-profile-bio">'+window.S.utils.escapeHtml(profile.bio)+'</div>':'')+
       '<div class="rs-profile-meta">'+
@@ -509,11 +513,11 @@ window.S.app = window.S.app || {};
 
     if(online.length){
       h+='<div class="rs-member-group">В сети — '+online.length+'</div>';
-      online.forEach(function(m){h+=renderMemberItem(m,u);});
+      online.forEach(function(m){h+=renderMemberItem(m);});
     }
     if(offline.length){
       h+='<div class="rs-member-group">Офлайн — '+offline.length+'</div>';
-      offline.forEach(function(m){h+=renderMemberItem(m,u);});
+      offline.forEach(function(m){h+=renderMemberItem(m);});
     }
     rs.innerHTML=h;
     bindMemberActions(rs);
@@ -564,9 +568,9 @@ window.S.app = window.S.app || {};
   async function fetchServerMemberProfile(uid){
     try{
       var c=window.S.supabase;if(!c)return null;
-      var r=await c.from('profiles').select('id,username,avatar_url,status,email,bio,custom_status,created_at').eq('id',uid).single();
+      var r=await c.from('profiles').select('id,username,avatar_url,status,email,bio,created_at').eq('id',uid).single();
       return r.data||null;
-    }catch(e){console.error('[SentCor] fetchServerMemberProfile:',e);return null;}
+    }catch(e){console.warn('[SentCor] fetchServerMemberProfile:',e);return null;}
   }
 
   async function openChatWithUser(uid){
@@ -589,7 +593,6 @@ window.S.app = window.S.app || {};
     }
   }
 
-  /* ========== CHAT (DM) ========== */
   async function openChat(fid){
     var f=window.S.friends.getFriends().find(function(x){return x.id===fid;});if(!f)return;
     view='chats';activeServer=null;activeChannel=null;
@@ -606,7 +609,6 @@ window.S.app = window.S.app || {};
     renderRightSidebar();
   }
 
-  /* ========== NAVIGATION ========== */
   function renderRailActive(){
     document.querySelectorAll('.rail-icon').forEach(function(el){el.classList.remove('active');});
     document.querySelectorAll('.rail-server-icon').forEach(function(el){el.classList.remove('active');});
@@ -644,7 +646,6 @@ window.S.app = window.S.app || {};
 
     bar.addEventListener('mouseenter',function(){bar.style.background='rgba(255,255,255,0.08)';});
     bar.addEventListener('mouseleave',function(){bar.style.background='rgba(9,9,11,0.5)';});
-
     bar.addEventListener('click',function(e){
       if(e.target.closest('#pb-settings')||e.target.closest('#pb-logout'))return;
       openProfileEdit();
@@ -663,7 +664,6 @@ window.S.app = window.S.app || {};
       if(r.error){window.S.ui.showToast(r.error,'error');return;}
       window.S.ui.showToast('Профиль обновлён!','success');
       window.S.ui.closeModal();
-      renderProfileBarInSubSidebar();
       renderSubSidebar();
     });
   }

@@ -17,7 +17,7 @@ window.S.chat = window.S.chat || {};
       render();
       return msgs;
     }catch(e){
-      console.error('[SentCor] fetchMessages:',e);
+      console.warn('[SentCor] fetchMessages:',e);
       msgs=[];
       render();
       return[];
@@ -30,15 +30,15 @@ window.S.chat = window.S.chat || {};
     var u=window.S.auth.getUser();if(!u||!activeId||!content||!content.trim())return;
     try{
       var c=gS();if(!c)return;
-      var r=await c.from('messages').insert({
-        sender_id:u.id,
-        receiver_id:activeId,
-        content:content.trim(),
-        read:false
-      });
+      var cleanMessageData = {
+        sender_id: u.id,
+        receiver_id: activeId,
+        content: content.trim()
+      };
+      var r=await c.from('messages').insert(cleanMessageData);
       if(r.error)throw r.error;
     }catch(e){
-      console.error('[SentCor] sendMsg:',e);
+      console.warn('[SentCor] sendMsg:',e);
       window.S.ui.showToast('Ошибка отправки','error');
     }
   }
@@ -51,7 +51,7 @@ window.S.chat = window.S.chat || {};
   }
 
   function handleTyping(){
-    if(!_typing){_typing=true;try{var c=gS();if(c&&activeId){var u=window.S.auth.getUser();if(u)c.channel('typing:'+activeId+':'+u.id).track({user_id:u.id});}}catch(e){console.error('[SentCor] typing:',e);}}
+    if(!_typing){_typing=true;try{var c=gS();if(c&&activeId){var u=window.S.auth.getUser();if(u)c.channel('typing:'+activeId+':'+u.id).track({user_id:u.id});}}catch(e){console.warn('[SentCor] typing:',e);}}
     if(_tt)clearTimeout(_tt);_tt=setTimeout(function(){_typing=false;},2000);
   }
 
@@ -112,7 +112,7 @@ window.S.chat = window.S.chat || {};
     try{
       var c=gS();if(!c)return;
       await c.from('messages').update({read:true}).eq('sender_id',fid).eq('receiver_id',u.id).eq('read',false);
-    }catch(e){console.error('[SentCor] markRead:',e);}
+    }catch(e){console.warn('[SentCor] markRead:',e);}
   }
 
   function subRT(){
@@ -129,7 +129,7 @@ window.S.chat = window.S.chat || {};
               if(u&&m.sender_id===window.S.chat.activeId)markRead(window.S.chat.activeId);
             }
             if(window.S.app&&window.S.app.refreshConversations)window.S.app.refreshConversations();
-          }catch(e){console.error('[SentCor] RT insert:',e);}
+          }catch(e){console.warn('[SentCor] RT insert:',e);}
         })
         .on('postgres_changes',{event:'UPDATE',schema:'public',table:'messages'},function(p){
           try{
@@ -138,10 +138,10 @@ window.S.chat = window.S.chat || {};
               var i=msgs.findIndex(function(x){return x.id===m.id;});
               if(i>-1){msgs[i]=m;render();}
             }
-          }catch(e){console.error('[SentCor] RT update:',e);}
+          }catch(e){console.warn('[SentCor] RT update:',e);}
         }).subscribe();
       _sub=true;
-    }catch(e){console.error('[SentCor] subscribeRealtime:',e);}
+    }catch(e){console.warn('[SentCor] subscribeRealtime:',e);}
   }
 
   window.S.chat.fetchMessages=fetchMessages;

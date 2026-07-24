@@ -27,24 +27,20 @@ window.S._pendingAvatar = null;
         r=await c.auth.signUp({email:e,password:p});
         if(r.data&&r.data.user&&!r.error){
           try{
-            var payload=window.S.utils.cleanPayload({
-              id:r.data.user.id,
-              username:u,
-              email:e,
-              avatar_url:'',
-              status:'online',
-              bio:'',
-              custom_status:'',
-              updated_at:new Date().toISOString()
-            });
-            await c.from('profiles').upsert(payload,{onConflict:'id'});
-          }catch(upsertErr){console.error('[SentCor] profiles upsert:',upsertErr);}
+            await c.from('profiles').upsert({
+              id: r.data.user.id,
+              username: u,
+              avatar_url: null,
+              bio: '',
+              status: 'online'
+            }, { onConflict: 'id' });
+          }catch(upsertErr){console.warn('[SentCor] profiles upsert:',upsertErr);}
         }
       }
       if(r.error)throw r.error;
       user=r.data.user;
-      try{await fetchP();}catch(e){console.error('[SentCor] fetchProfile:',e);}
-      try{await c.from('profiles').upsert(window.S.utils.cleanPayload({id:user.id,status:'online',updated_at:new Date().toISOString()}),{onConflict:'id'});}catch(e){console.error('[SentCor] status update:',e);}
+      try{await fetchP();}catch(e){console.warn('[SentCor] fetchProfile:',e);}
+      try{await c.from('profiles').upsert({id:user.id,status:'online'},{onConflict:'id'});}catch(e){console.warn('[SentCor] status update:',e);}
       window.S.ui.showToast(isLogin?'Добро пожаловать!':'Аккаунт создан!','success');
       window.S.auth.onAuthSuccess(user);
     }catch(err){var m=(err&&err.message)?err.message:'Ошибка';if(m.includes('Invalid login'))m='Неверный email или пароль';if(m.includes('already registered'))m='Email уже зарегистрирован';showErr(m);}
@@ -54,9 +50,9 @@ window.S._pendingAvatar = null;
     if(!user)return null;
     try{
       var c=gS();if(!c)return null;
-      var r=await c.from('profiles').select('id,username,avatar_url,status,email,bio,custom_status,created_at').eq('id',user.id).single();
+      var r=await c.from('profiles').select('id,username,avatar_url,status,email,bio,created_at').eq('id',user.id).single();
       if(r.data)profile=r.data;
-    }catch(e){console.error('[SentCor] fetchProfile:',e);}
+    }catch(e){console.warn('[SentCor] fetchProfile:',e);}
     return profile;
   }
   async function check(){
@@ -65,22 +61,22 @@ window.S._pendingAvatar = null;
       var r=await c.auth.getSession();
       if(r.data&&r.data.session&&r.data.session.user){
         user=r.data.session.user;
-        try{await fetchP();}catch(e){console.error('[SentCor] fetchProfile:',e);}
-        try{await c.from('profiles').upsert(window.S.utils.cleanPayload({id:user.id,status:'online',updated_at:new Date().toISOString()}),{onConflict:'id'});}catch(e){console.error('[SentCor] status update:',e);}
+        try{await fetchP();}catch(e){console.warn('[SentCor] fetchProfile:',e);}
+        try{await c.from('profiles').upsert({id:user.id,status:'online'},{onConflict:'id'});}catch(e){console.warn('[SentCor] status update:',e);}
         window.S.auth.onAuthSuccess(user);
         return user;
       }
-    }catch(e){console.error('[SentCor] Session:',e);}
+    }catch(e){console.warn('[SentCor] Session:',e);}
     return null;
   }
   async function logout(){
     try{
       var c=gS();
       if(c&&user){
-        try{await c.from('profiles').upsert(window.S.utils.cleanPayload({id:user.id,status:'offline',updated_at:new Date().toISOString()}),{onConflict:'id'});}catch(e){console.error('[SentCor] logout status:',e);}
+        try{await c.from('profiles').upsert({id:user.id,status:'offline'},{onConflict:'id'});}catch(e){console.warn('[SentCor] logout status:',e);}
         await c.auth.signOut();
       }
-    }catch(e){console.error('[SentCor] logout:',e);}
+    }catch(e){console.warn('[SentCor] logout:',e);}
     user=null;profile=null;
     if($as)$as.classList.add('active');if($ms)$ms.classList.remove('active');
     window.S.ui.showToast('Вы вышли','info');
@@ -95,18 +91,18 @@ window.S._pendingAvatar = null;
     if(!user)return{error:'Не авторизован'};
     try{
       var c=gS();if(!c)return{error:'No supabase'};
-      var updateData={id:user.id,updated_at:new Date().toISOString()};
-      if(d.username!==undefined) updateData.username=d.username;
-      if(d.bio!==undefined) updateData.bio=d.bio;
-      if(d.status!==undefined) updateData.status=d.status;
-      if(d.avatar_url!==undefined) updateData.avatar_url=d.avatar_url;
-      if(d.custom_status!==undefined) updateData.custom_status=d.custom_status;
-      if(window.S._pendingAvatar){updateData.avatar_url=window.S._pendingAvatar;window.S._pendingAvatar=null;}
-      var cleaned=window.S.utils.cleanPayload(updateData);
-      var r=await c.from('profiles').upsert(cleaned,{onConflict:'id'});
+      var cleanProfileData = {
+        id: user.id,
+        username: (d.username !== undefined ? d.username : (profile ? profile.username : 'User')),
+        avatar_url: (d.avatar_url !== undefined ? d.avatar_url : (profile ? profile.avatar_url : null)),
+        bio: (d.bio !== undefined ? d.bio : (profile ? profile.bio : '')),
+        status: (d.status !== undefined ? d.status : 'online')
+      };
+      if(window.S._pendingAvatar){cleanProfileData.avatar_url=window.S._pendingAvatar;window.S._pendingAvatar=null;}
+      var r=await c.from('profiles').upsert(cleanProfileData,{onConflict:'id'});
       if(r.error)throw r.error;
-      try{await fetchP();}catch(e){console.error('[SentCor] fetchProfile:',e);}
+      try{await fetchP();}catch(e){console.warn('[SentCor] fetchProfile:',e);}
       return{success:true};
-    }catch(e){console.error('[SentCor] updateProfile:',e);return{error:e.message};}
+    }catch(e){console.warn('[SentCor] updateProfile:',e);return{error:e.message};}
   };
 })();
