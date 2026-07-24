@@ -5,16 +5,23 @@ window.S.app = window.S.app || {};
   var view='chats',convs=[],frTab='all',servers=[],activeServer=null,activeChannel=null,serverMessages=[],_serverSub=false;
 
   async function onLogin(u){
-    window.S.chat.subscribeRealtime();window.S.friends.subscribeRealtime();
-    window.S.friends.onUpdate=refreshAll;renderProfileBar();await refreshAll();
-    await fetchServers();
+    try{window.S.chat.subscribeRealtime();}catch(e){console.error('[SentCor] subscribe chat:',e);}
+    try{window.S.friends.subscribeRealtime();}catch(e){console.error('[SentCor] subscribe friends:',e);}
+    window.S.friends.onUpdate=refreshAll;
+    renderProfileBar();
+    try{await refreshAll();}catch(e){console.error('[SentCor] refreshAll:',e);}
+    try{await fetchServers();}catch(e){console.error('[SentCor] fetchServers:',e);}
+    renderRailServers();
     renderSubSidebar();
     renderRightSidebar();
   }
 
   async function refreshAll(){
-    await window.S.friends.fetchFriends();await window.S.friends.fetchPending();
-    await buildConvs();renderSubSidebar();updateBadge();
+    try{await window.S.friends.fetchFriends();}catch(e){console.error('[SentCor] fetchFriends:',e);}
+    try{await window.S.friends.fetchPending();}catch(e){console.error('[SentCor] fetchPending:',e);}
+    try{await buildConvs();}catch(e){console.error('[SentCor] buildConvs:',e);}
+    renderSubSidebar();
+    updateBadge();
   }
 
   function updateBadge(){
@@ -26,90 +33,112 @@ window.S.app = window.S.app || {};
   async function buildConvs(){
     var u=window.S.auth.getUser();var frs=window.S.friends.getFriends();
     if(!u||!frs.length){convs=[];return;}
-    try{var c=window.S.supabase;if(!c)return;
-    var ids=frs.map(function(f){return f.id;});var parts=[];
-    ids.forEach(function(f){parts.push('and(sender_id.eq.'+u.id+',receiver_id.eq.'+f+')');parts.push('and(sender_id.eq.'+f+',receiver_id.eq.'+u.id+')');});
-    var r=await c.from('messages').select('sender_id,receiver_id,content,created_at').or(parts.join(',')).order('created_at',{ascending:false});
-    if(r.error)throw r.error;var all=r.data||[];var fm={};frs.forEach(function(f){fm[f.id]=f;});
-    convs=frs.map(function(f){var ms=all.filter(function(m){return(m.sender_id===u.id&&m.receiver_id===f.id)||(m.sender_id===f.id&&m.receiver_id===u.id);});var last=ms.length?ms[0]:null;return{friend:f,lastMessage:last?last.content:'',lastTime:last?last.created_at:''};});
-    convs.sort(function(a,b){if(!a.lastTime&&!b.lastTime)return 0;if(!a.lastTime)return 1;if(!b.lastTime)return-1;return new Date(b.lastTime)-new Date(a.lastTime);});
-    }catch(e){convs=frs.map(function(f){return{friend:f,lastMessage:'',lastTime:''};});}
+    try{
+      var c=window.S.supabase;if(!c)return;
+      var ids=frs.map(function(f){return f.id;});var parts=[];
+      ids.forEach(function(f){parts.push('and(sender_id.eq.'+u.id+',receiver_id.eq.'+f+')');parts.push('and(sender_id.eq.'+f+',receiver_id.eq.'+u.id+')');});
+      if(!parts.length){convs=[];return;}
+      var r=await c.from('messages').select('sender_id,receiver_id,content,created_at').or(parts.join(',')).order('created_at',{ascending:false});
+      if(r.error)throw r.error;
+      var all=r.data||[];
+      convs=frs.map(function(f){var ms=all.filter(function(m){return(m.sender_id===u.id&&m.receiver_id===f.id)||(m.sender_id===f.id&&m.receiver_id===u.id);});var last=ms.length?ms[0]:null;return{friend:f,lastMessage:last?last.content:'',lastTime:last?last.created_at:''};});
+      convs.sort(function(a,b){if(!a.lastTime&&!b.lastTime)return 0;if(!a.lastTime)return 1;if(!b.lastTime)return-1;return new Date(b.lastTime)-new Date(a.lastTime);});
+    }catch(e){
+      console.error('[SentCor] buildConvs:',e);
+      convs=frs.map(function(f){return{friend:f,lastMessage:'',lastTime:''};});
+    }
   }
 
   /* ========== SERVERS ========== */
   async function fetchServers(){
-    try{var c=window.S.supabase;if(!c)return;
-    var u=window.S.auth.getUser();if(!u){servers=[];return;}
-    var memR=await c.from('server_members').select('server_id,role').eq('user_id',u.id);
-    if(memR.error)throw memR.error;
-    var memberOf=(memR.data||[]).map(function(x){return x.server_id;});
-    if(!memberOf.length){servers=[];return;}
-    var sR=await c.from('servers').select('id,name,icon_url,owner_id,created_at').in('id',memberOf);
-    if(sR.error)throw sR.error;
-    servers=sR.data||[];
-    }catch(e){servers=[];}
+    try{
+      var c=window.S.supabase;if(!c)return;
+      var u=window.S.auth.getUser();if(!u){servers=[];return;}
+      var memR=await c.from('server_members').select('server_id,role').eq('user_id',u.id);
+      if(memR.error)throw memR.error;
+      var memberOf=(memR.data||[]).map(function(x){return x.server_id;});
+      if(!memberOf.length){servers=[];return;}
+      var sR=await c.from('servers').select('id,name,icon_url,owner_id').in('id',memberOf);
+      if(sR.error)throw sR.error;
+      servers=sR.data||[];
+    }catch(e){
+      console.error('[SentCor] fetchServers:',e);
+      servers=[];
+    }
   }
 
   async function createServer(name, iconUrl){
-    try{var c=window.S.supabase;if(!c)return{error:'No supabase'};
-    var u=window.S.auth.getUser();if(!u)return{error:'Не авторизован'};
-    var r=await c.from('servers').insert({name:name,icon_url:iconUrl||'',owner_id:u.id,created_at:new Date().toISOString()});
-    if(r.error)throw r.error;
-    var newServer=r.data?r.data[0]:null;
-    if(newServer){
-      await c.from('server_members').insert({server_id:newServer.id,user_id:u.id,role:'owner',joined_at:new Date().toISOString()});
-      await c.from('server_channels').insert([
-        {server_id:newServer.id,name:'общий',type:'text',created_at:new Date().toISOString()},
-        {server_id:newServer.id,name:'флуд',type:'text',created_at:new Date().toISOString()},
-        {server_id:newServer.id,name:'Гостиная',type:'voice',created_at:new Date().toISOString()},
-        {server_id:newServer.id,name:'Игровая',type:'voice',created_at:new Date().toISOString()}
-      ]);
-      await fetchServers();renderRailServers();renderSubSidebar();
-    }
-    return{success:true};
-    }catch(e){return{error:e.message};}
+    try{
+      var c=window.S.supabase;if(!c)return{error:'No supabase'};
+      var u=window.S.auth.getUser();if(!u)return{error:'Не авторизован'};
+      var r=await c.from('servers').insert({name:name,icon_url:iconUrl||'',owner_id:u.id});
+      if(r.error)throw r.error;
+      var newServer=r.data?r.data[0]:null;
+      if(newServer){
+        try{await c.from('server_members').insert({server_id:newServer.id,user_id:u.id,role:'owner'});}catch(e){console.error('[SentCor] insert member:',e);}
+        try{
+          await c.from('server_channels').insert([
+            {server_id:newServer.id,name:'общий',type:'text'},
+            {server_id:newServer.id,name:'флуд',type:'text'},
+            {server_id:newServer.id,name:'Гостиная',type:'voice'},
+            {server_id:newServer.id,name:'Игровая',type:'voice'}
+          ]);
+        }catch(e){console.error('[SentCor] insert channels:',e);}
+        try{await fetchServers();}catch(e){console.error('[SentCor] fetchServers:',e);}
+        renderRailServers();
+        renderSubSidebar();
+      }
+      return{success:true};
+    }catch(e){console.error('[SentCor] createServer:',e);return{error:e.message};}
   }
 
   async function fetchServerChannels(serverId){
-    try{var c=window.S.supabase;if(!c)return[];
-    var r=await c.from('server_channels').select('id,name,type,created_at').eq('server_id',serverId).order('created_at',{ascending:true});
-    if(r.error)throw r.error;return r.data||[];
-    }catch(e){return[];}
+    try{
+      var c=window.S.supabase;if(!c)return[];
+      var r=await c.from('server_channels').select('id,name,type').eq('server_id',serverId).order('created_at',{ascending:true});
+      if(r.error)throw r.error;
+      return r.data||[];
+    }catch(e){console.error('[SentCor] fetchServerChannels:',e);return[];}
   }
 
   async function fetchServerMembers(serverId){
-    try{var c=window.S.supabase;if(!c)return[];
-    var r=await c.from('server_members').select('user_id,role,joined_at').eq('server_id',serverId);
-    if(r.error)throw r.error;
-    var memberOf=(r.data||[]);
-    if(!memberOf.length)return[];
-    var uids=memberOf.map(function(x){return x.user_id;});
-    var p=await c.from('profiles').select('id,username,avatar_url,status,bio,created_at').in('id',uids);
-    if(p.error)throw p.error;
-    var pm={};(p.data||[]).forEach(function(x){pm[x.id]=x;});
-    return memberOf.map(function(m){return{profile:pm[m.user_id]||null,role:m.role,joined_at:m.joined_at};});
-    }catch(e){return[];}
+    try{
+      var c=window.S.supabase;if(!c)return[];
+      var r=await c.from('server_members').select('user_id,role').eq('server_id',serverId);
+      if(r.error)throw r.error;
+      var memberOf=(r.data||[]);
+      if(!memberOf.length)return[];
+      var uids=memberOf.map(function(x){return x.user_id;});
+      var p=await c.from('profiles').select('id,username,avatar_url,status,bio,created_at').in('id',uids);
+      if(p.error)throw p.error;
+      var pm={};(p.data||[]).forEach(function(x){pm[x.id]=x;});
+      return memberOf.map(function(m){return{profile:pm[m.user_id]||null,role:m.role};});
+    }catch(e){console.error('[SentCor] fetchServerMembers:',e);return[];}
   }
 
   async function fetchServerMessages(serverId, channelId){
-    try{var c=window.S.supabase;if(!c)return[];
-    var r=await c.from('server_messages').select('id,sender_id,content,created_at,server_id,channel_id').eq('server_id',serverId).eq('channel_id',channelId).order('created_at',{ascending:true});
-    if(r.error)throw r.error;return r.data||[];
-    }catch(e){return[];}
+    try{
+      var c=window.S.supabase;if(!c)return[];
+      var r=await c.from('server_messages').select('id,sender_id,content,created_at,server_id,channel_id').eq('server_id',serverId).eq('channel_id',channelId).order('created_at',{ascending:true});
+      if(r.error)throw r.error;
+      return r.data||[];
+    }catch(e){console.error('[SentCor] fetchServerMessages:',e);return[];}
   }
 
   async function sendServerMessage(serverId, channelId, content){
-    try{var c=window.S.supabase;if(!c)return;
-    var u=window.S.auth.getUser();if(!u)return;
-    await c.from('server_messages').insert({sender_id:u.id,content:content.trim(),created_at:new Date().toISOString(),server_id:serverId,channel_id:channelId});
-    }catch(e){window.S.ui.showToast('Ошибка отправки','error');}
+    try{
+      var c=window.S.supabase;if(!c)return;
+      var u=window.S.auth.getUser();if(!u)return;
+      await c.from('server_messages').insert({sender_id:u.id,content:content.trim(),server_id:serverId,channel_id:channelId});
+    }catch(e){console.error('[SentCor] sendServerMessage:',e);window.S.ui.showToast('Ошибка отправки','error');}
   }
 
   async function kickMember(serverId, userId){
-    try{var c=window.S.supabase;if(!c)return{error:'No supabase'};
-    await c.from('server_members').delete().eq('server_id',serverId).eq('user_id',userId);
-    return{success:true};
-    }catch(e){return{error:e.message};}
+    try{
+      var c=window.S.supabase;if(!c)return{error:'No supabase'};
+      await c.from('server_members').delete().eq('server_id',serverId).eq('user_id',userId);
+      return{success:true};
+    }catch(e){console.error('[SentCor] kickMember:',e);return{error:e.message};}
   }
 
   /* ========== RAIL SERVERS ========== */
@@ -192,7 +221,7 @@ window.S.app = window.S.app || {};
     var headerStatus=document.getElementById('chat-header-status');
     if(headerName) headerName.textContent='# '+channel.name;
     if(headerStatus) headerStatus.textContent=activeServer?activeServer.name:'';
-    serverMessages=await fetchServerMessages(activeServer.id,channel.id);
+    try{serverMessages=await fetchServerMessages(activeServer.id,channel.id);}catch(e){console.error('[SentCor] openServerChannel:',e);serverMessages=[];}
     renderServerMessages();
   }
 
@@ -231,12 +260,8 @@ window.S.app = window.S.app || {};
   function renderSubSidebar(){
     var sidebar=document.getElementById('sub-sidebar');if(!sidebar)return;
     if(view==='servers'&&activeServer){renderServerPanel();return;}
-    if(view==='servers'){
-      renderServersList(sidebar);return;
-    }
-    if(view==='friends'){
-      renderFriendsSidebar(sidebar);return;
-    }
+    if(view==='servers'){renderServersList(sidebar);return;}
+    if(view==='friends'){renderFriendsSidebar(sidebar);return;}
     renderChatsSidebar(sidebar);
   }
 
@@ -395,8 +420,10 @@ window.S.app = window.S.app || {};
           else{window.S.ui.showToast('Запрос отправлен!','success');b.textContent='Отправлено';b.classList.add('btn--sent');}
         });
       });
-    }catch(e){res.innerHTML='<div class="empty-state empty-state--sm"><div class="empty-text">Ошибка</div></div>';}
-    finally{window.S.ui.hideLoading();}
+    }catch(e){
+      console.error('[SentCor] doSearchFriends:',e);
+      res.innerHTML='<div class="empty-state empty-state--sm"><div class="empty-text">Ошибка</div></div>';
+    }finally{window.S.ui.hideLoading();}
   }
 
   function renderServersList(sidebar){
@@ -410,7 +437,7 @@ window.S.app = window.S.app || {};
         var letter=s.name?s.name.charAt(0).toUpperCase():'S';
         h+='<div class="conv-item" data-sid="'+s.id+'">'+
           '<div class="conv-av"><div class="avatar" style="width:36px;height:36px;background:var(--bg-glass-a);"><span class="avatar-fb" style="font-size:16px;">'+letter+'</span></div></div>'+
-          '<div class="conv-info"><div class="conv-name">'+window.S.utils.escapeHtml(s.name)+'</div><div class="conv-preview">'+window.S.utils.formatRegDate(s.created_at)+'</div></div></div>';
+          '<div class="conv-info"><div class="conv-name">'+window.S.utils.escapeHtml(s.name)+'</div></div></div>';
       });
     }
     h+='</div>';
@@ -539,10 +566,11 @@ window.S.app = window.S.app || {};
   }
 
   async function fetchServerMemberProfile(uid){
-    try{var c=window.S.supabase;if(!c)return null;
-    var r=await c.from('profiles').select('id,username,avatar_url,status,email,bio,created_at').eq('id',uid).single();
-    return r.data||null;
-    }catch(e){return null;}
+    try{
+      var c=window.S.supabase;if(!c)return null;
+      var r=await c.from('profiles').select('id,username,avatar_url,status,email,bio,created_at').eq('id',uid).single();
+      return r.data||null;
+    }catch(e){console.error('[SentCor] fetchServerMemberProfile:',e);return null;}
   }
 
   async function openChatWithUser(uid){
@@ -588,17 +616,19 @@ window.S.app = window.S.app || {};
     document.querySelectorAll('.rail-server-icon').forEach(function(el){el.classList.remove('active');});
     if(view==='chats'){var el=document.querySelector('[data-rail="chats"]');if(el)el.classList.add('active');}
     else if(view==='friends'){var el2=document.querySelector('[data-rail="friends"]');if(el2)el2.classList.add('active');}
-    else if(view==='servers'&&activeServer){
-      var sel=document.querySelector('.rail-server-icon[data-sid="'+activeServer.id+'"]');
-      if(sel)sel.classList.add('active');
+    else if(view==='servers'){
+      if(activeServer){
+        var sel=document.querySelector('.rail-server-icon[data-sid="'+activeServer.id+'"]');
+        if(sel)sel.classList.add('active');
+      }else{
+        var srvIcon=document.querySelector('[data-rail="servers"]');
+        if(srvIcon)srvIcon.classList.add('active');
+      }
     }
   }
 
   /* ========== PROFILE BAR ========== */
-  function renderProfileBar(){
-    var bar=document.getElementById('sub-sidebar');
-    // Profile bar is now integrated into sub-sidebar
-  }
+  function renderProfileBar(){}
 
   /* ========== INIT UI ========== */
   function initUI(){
@@ -613,6 +643,7 @@ window.S.app = window.S.app || {};
         activeServer=null;activeChannel=null;
         if(v==='chats'){view='chats';window.S.chat.setActive(null,null);document.getElementById('chat-header-name').textContent='';document.getElementById('chat-header-status').textContent='';document.getElementById('chat-header-avatar').innerHTML='';}
         else if(v==='friends'){view='friends';}
+        else if(v==='servers'){view='servers';}
         renderRailActive();renderSubSidebar();renderRightSidebar();
       });
     });
@@ -664,22 +695,13 @@ window.S.app = window.S.app || {};
       });
     });
 
-    /* Profile bar - bottom of sub-sidebar */
     renderProfileBarInSubSidebar();
   }
 
-  function renderProfileBarInSubSidebar(){
-    // We'll add a profile bar at the bottom of the sub-sidebar when it's showing chats
-    // This is handled in renderSubSidebar now via a profile section
-    // Actually, let's add it as a persistent element at the bottom of sub-sidebar
-    // We'll handle it differently - add a click handler on the sub-sidebar bottom area
-  }
+  function renderProfileBarInSubSidebar(){}
 
-  /* ========== PROFILE BAR (in sub-sidebar footer) ========== */
-  // We render this separately so it persists across sub-sidebar changes
   function addProfileBarToSubSidebar(){
     var sidebar=document.getElementById('sub-sidebar');if(!sidebar)return;
-    // Remove existing profile bar
     var old=sidebar.querySelector('.profile-bar');if(old)old.remove();
     var p=window.S.auth.getProfile();var u=window.S.auth.getUser();
     if(!u)return;
@@ -695,11 +717,9 @@ window.S.app = window.S.app || {};
       '<button class="btn-icon" id="pb-logout" title="Выйти" style="width:30px;height:30px;">'+window.S.icons.logout+'</button></div>';
     sidebar.appendChild(bar);
 
-    // Hover effect
     bar.addEventListener('mouseenter',function(){bar.style.background='rgba(255,255,255,0.08)';});
     bar.addEventListener('mouseleave',function(){bar.style.background='rgba(9,9,11,0.5)';});
 
-    // Click on bar (except icons) opens profile edit
     bar.addEventListener('click',function(e){
       if(e.target.closest('#pb-settings')||e.target.closest('#pb-logout'))return;
       openProfileEdit();
@@ -723,7 +743,6 @@ window.S.app = window.S.app || {};
     });
   }
 
-  // Watch sub-sidebar changes to add profile bar
   var _obs=new MutationObserver(function(){
     var sidebar=document.getElementById('sub-sidebar');if(!sidebar)return;
     var bar=sidebar.querySelector('.profile-bar');
