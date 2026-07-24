@@ -1,6 +1,7 @@
 /* SentCor — Auth */
 window.S = window.S || {};
 window.S.auth = window.S.auth || {};
+window.S._pendingAvatar = null;
 (function(){
   var sb=null,user=null,profile=null,isLogin=true;
   function gS(){if(!sb&&window.S&&window.S.supabase)sb=window.S.supabase;return sb;}
@@ -24,6 +25,7 @@ window.S.auth = window.S.auth || {};
       else{r=await c.auth.signUp({email:e,password:p});if(r.data&&r.data.user&&!r.error){await c.from('profiles').upsert({id:r.data.user.id,username:u,email:e,avatar_url:'',status:'online',bio:'',created_at:new Date().toISOString()},{onConflict:'id'});}}
       if(r.error)throw r.error;
       user=r.data.user;await fetchP();
+      if(user&&user.id){try{await c.from('profiles').upsert({id:user.id,status:'online'},{onConflict:'id'});}catch(e){}}
       window.S.ui.showToast(isLogin?'Добро пожаловать!':'Аккаунт создан!','success');
       window.S.auth.onAuthSuccess(user);
     }catch(err){var m=(err&&err.message)?err.message:'Ошибка';if(m.includes('Invalid login'))m='Неверный email или пароль';if(m.includes('already registered'))m='Email уже зарегистрирован';showErr(m);}
@@ -31,11 +33,11 @@ window.S.auth = window.S.auth || {};
   }
   async function fetchP(){
     if(!user)return null;
-    try{var c=gS();if(!c)return null;var r=await c.from('profiles').select('id,username,avatar_url,status,email,bio').eq('id',user.id).single();if(r.data)profile=r.data;}catch(e){console.warn('[SentCor] fetchProfile:',e.message);}
+    try{var c=gS();if(!c)return null;var r=await c.from('profiles').select('id,username,avatar_url,status,email,bio,created_at').eq('id',user.id).single();if(r.data)profile=r.data;}catch(e){console.warn('[SentCor] fetchProfile:',e.message);}
     return profile;
   }
   async function check(){
-    try{var c=gS();if(!c)return null;var r=await c.auth.getSession();if(r.data&&r.data.session&&r.data.session.user){user=r.data.session.user;await fetchP();window.S.auth.onAuthSuccess(user);return user;}}catch(e){console.warn('[SentCor] Session:',e.message);}
+    try{var c=gS();if(!c)return null;var r=await c.auth.getSession();if(r.data&&r.data.session&&r.data.session.user){user=r.data.session.user;await fetchP();if(user&&user.id){try{await c.from('profiles').upsert({id:user.id,status:'online'},{onConflict:'id'});}catch(e){}}window.S.auth.onAuthSuccess(user);return user;}}catch(e){console.warn('[SentCor] Session:',e.message);}
     return null;
   }
   async function logout(){
@@ -50,5 +52,16 @@ window.S.auth = window.S.auth || {};
   window.S.auth.getUser=function(){return user;};
   window.S.auth.getProfile=function(){return profile;};
   window.S.auth.fetchProfile=fetchP;
-  window.S.auth.updateProfile=async function(d){if(!user)return{error:'Не авторизован'};try{var c=gS();if(!c)return{error:'No supabase'};var r=await c.from('profiles').upsert(Object.assign({id:user.id},d),{onConflict:'id'});if(r.error)throw r.error;await fetchP();return{success:true};}catch(e){return{error:e.message};}};
+  window.S.auth.updateProfile=async function(d){
+    if(!user)return{error:'Не авторизован'};
+    try{
+      var c=gS();if(!c)return{error:'No supabase'};
+      var updateData = Object.assign({id:user.id},d);
+      if(window.S._pendingAvatar){updateData.avatar_url = window.S._pendingAvatar; window.S._pendingAvatar = null;}
+      var r=await c.from('profiles').upsert(updateData,{onConflict:'id'});
+      if(r.error)throw r.error;
+      await fetchP();
+      return{success:true};
+    }catch(e){return{error:e.message};}
+  };
 })();

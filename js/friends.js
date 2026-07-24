@@ -4,7 +4,7 @@ window.S.friends = window.S.friends || {};
 (function(){
   var sb=null,friends=[],pending=[],_sub=false;
   function gS(){if(!sb&&window.S&&window.S.supabase)sb=window.S.supabase;return sb;}
-  var PF='id,username,avatar_url,status,email,bio';
+  var PF='id,username,avatar_url,status,email,bio,created_at';
 
   async function fetchFriends(){
     var u=window.S.auth.getUser();if(!u)return[];
